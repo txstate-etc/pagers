@@ -1,0 +1,11 @@
+[package]
+name = "testing"
+version = "0.1.0"
+authors = ["Charles Tabor <ct37@txstate.edu>"]
+
+[dependencies]
+chrono = "0.4.2"
+failure = "0.1.1"
+serde = "1.0.55"
+serde_derive = "1.0.55"
+serde_json = "1.0.17"
