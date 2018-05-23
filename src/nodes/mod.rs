@@ -260,4 +260,74 @@ mod tests {
         let nodes = new(data, "mgnl:asset").unwrap();
         assert_eq!(nodes, None)
     }
+
+    // Given data from repo with depth of 1, return back a list of sites under that repo
+    // curl -s --user '<usr>:<pwd>' -H 'Accept: application/json' '<url>/.rest/nodes/v1/<repo>/?depth=1&excludeNodeTypes=mgnl:resource' | python -m json.tool
+    #[test]
+    fn test_nodes_dam_site() {
+        let data = r#"{
+            "identifier": "cafebabe-cafe-babe-cafe-babecafebabe",
+            "name": "",
+            "nodes": [
+                {
+                    "identifier": "deadbeef-cafe-babe-cafe-babecafebabe",
+                    "name": "jcr:system",
+                    "nodes": null,
+                    "path": "/jcr:system",
+                    "properties": [],
+                    "type": "rep:system"
+                },
+                {
+                    "identifier": "7c31a9de-1cb5-41ce-940e-f6716d6cf7ca",
+                    "name": "gato",
+                    "nodes": null,
+                    "path": "/gato",
+                    "properties": [
+                        {
+                            "multiple": false,
+                            "name": "title",
+                            "type": "String",
+                            "values": [
+                                "gato"
+                            ]
+                        }
+                    ],
+                    "type": "mgnl:folder"
+                },
+                {
+                    "identifier": "9c5a2747-c439-4c1c-bc0a-ac04f171c1d6",
+                    "name": "Asset.zip",
+                    "nodes": null,
+                    "path": "/Asset.zip",
+                    "properties": [
+                        {
+                            "multiple": false,
+                            "name": "gato_activated_on_creation",
+                            "type": "Boolean",
+                            "values": [
+                                "true"
+                            ]
+                        },
+                        {
+                            "multiple": false,
+                            "name": "name",
+                            "type": "String",
+                            "values": [
+                                "Asset Zip File"
+                            ]
+                        }
+                    ],
+                    "type": "mgnl:asset"
+                }
+            ],
+            "path": "/",
+            "properties": [],
+            "type": "rep:root"
+        }"#.as_bytes();
+        let nodes = new(data, "mgnl:folder").unwrap();
+        assert_eq!(nodes, Some(
+            vec![
+                Info{ path: "/gato".to_string(), last_modified: None },
+        ]));
+    }
 }
