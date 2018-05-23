@@ -5,7 +5,7 @@ extern crate serde_json;
 extern crate failure;
 extern crate chrono;
 
-mod pages;
+mod nodes;
 //use serde_json;
 
 fn main() {
@@ -61,6 +61,6 @@ fn main() {
         ],
         "type": "mgnl:page"
     }"#.as_bytes();
-    let ps = pages::new(data);
+    let ps = nodes::new(data, "mgnl:page");
     println!("{:?}", ps);
 }
