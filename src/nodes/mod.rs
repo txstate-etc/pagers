@@ -95,7 +95,7 @@ mod tests {
 
     // curl --user '<usr:pwd>' -H 'Accept: application/json' '<url>/.rest/nodes/v1/website/<site>?depth=999&excludeNodeTypes=mgnl:resource,mgnl:content,mgnl:contentNode,mgnl:area,mgnl:component,mgnl:user,mgnl:group,mgnl:role,mgnl:folder,mgnl:metaData,mgnl:nodeData,mgnl:reserve&includeMetadata=true' | python -m json.tool
     #[test]
-    fn test_nodes_type_page() {
+    fn test_page_nodes_for_tree_structure_of_website_repo() {
         let data = r#"{
         "identifier": "8697faaa-00bc-4c43-94fa-1a9fe2e10a49", 
         "name": "gato", 
@@ -159,7 +159,7 @@ mod tests {
     // curl -s --user '<usr>:<pwd>' -H 'Accept: application/json' '<url>/.rest/nodes/v1/dam/<site>?depth=999&excludeNodeTypes=mgnl:resource&includeMetadata=true' | python -m json.tool
     // NOTE: we do NOT want folders, only leaf nodes types "mgnl:assets"
     #[test]
-    fn test_nodes_type_asset() {
+    fn test_asset_nodes_for_leaf_nodes_in_dam_repo() {
         let data = r#"{
             "identifier": "7c31a9de-1cb5-41ce-940e-f6716d6cf7ca",
             "name": "gato",
@@ -239,7 +239,7 @@ mod tests {
     }
 
     #[test]
-    fn test_nodes_type_asset_empty() {
+    fn test_asset_nodes_for_empty_site_in_dam_repo() {
         let data = r#"{
             "identifier": "7c31a9de-1cb5-41ce-940e-f6716d6cf7ca",
             "name": "gato",
@@ -264,7 +264,7 @@ mod tests {
     // Given data from repo with depth of 1, return back a list of sites under that repo
     // curl -s --user '<usr>:<pwd>' -H 'Accept: application/json' '<url>/.rest/nodes/v1/<repo>/?depth=1&excludeNodeTypes=mgnl:resource' | python -m json.tool
     #[test]
-    fn test_nodes_dam_site() {
+    fn test_folder_nodes_for_sites_in_dam_repo() {
         let data = r#"{
             "identifier": "cafebabe-cafe-babe-cafe-babecafebabe",
             "name": "",
