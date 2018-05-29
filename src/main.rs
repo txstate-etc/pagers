@@ -4,9 +4,9 @@ extern crate serde_json;
 extern crate failure;
 extern crate chrono;
 
-mod rest;
-mod nodes;
-//use serde_json;
+pub mod repos;
+pub mod nodes;
+pub mod rest;
 
 fn main() {
     let data = r#"{

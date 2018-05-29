@@ -1,57 +1,14 @@
-use std::str::FromStr;
-use std::fmt::{self, Display};
 use serde_json::{self, Value};
 use failure::{Error, err_msg};
-
-macro_rules! lowercase_enum {
-    (name $name: ident,
-     $($str_name: expr => $variant: ident,)+
-    ) => {
-        #[derive(Debug, Copy, Clone, PartialEq)]
-        pub enum $name {
-            $($variant),+
-        }
-
-        impl FromStr for $name {
-            type Err = Error;
-
-            fn from_str(s: &str) -> Result<Self, Self::Err> {
-                match s {
-                    $($str_name => Ok($name::$variant),)+
-                    _ => Err(err_msg("Invalid value")),
-                }
-            }
-        }
-
-        impl Display for $name {
-            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                match self {
-                    $(&$name::$variant => write!(f, "{}", $str_name),)+
-                }
-            }
-        }
-    };
-}
+use repos;
 
 pub type Site = String;
 
 pub type Sites = Vec<Site>;
 
-lowercase_enum!{
-    name RepoType,
-    "dam" => Dam,
-    "website" => Website,
-    "config" => Config,
-    "gatoapps" => Gatoapps,
-    "resources" => Resources,
-    "usergroups" => Usergroups,
-    "userroles" => Userroles,
-    "users" => Users,
-}
-
 #[derive(Debug, PartialEq)]
 pub struct Repo {
-    repo_type: RepoType,
+    repo_type: repos::RepoType,
     sites: Option<Sites>,
 }
 
@@ -66,7 +23,7 @@ pub fn new(data: &str) -> Result<Repos, Error> {
                 Value::String(r) => repos.push(Repo{ repo_type: r.parse()?, sites: None }),
                 Value::Object(o) => {
                     for (repo, ss) in o {
-                        let repo: RepoType = repo.parse()?;
+                        let repo: repos::RepoType = repo.parse()?;
                         let mut sites: Sites = Vec::new();
                         if let Value::Array(ss) = ss {
                             for site in ss {
@@ -100,8 +57,8 @@ mod tests {
         let json = r#"["dam","website"]"#;
         let repos: Repos = new(json).unwrap();
         assert_eq!(repos, vec![
-            Repo{ repo_type: RepoType::Dam, sites: None },
-            Repo{ repo_type: RepoType::Website, sites: None },
+            Repo{ repo_type: repos::RepoType::Dam, sites: None },
+            Repo{ repo_type: repos::RepoType::Website, sites: None },
         ]);
     }
 
@@ -110,8 +67,8 @@ mod tests {
         let json = r#"[{"dam": ["dam1","dam2"]}, {"website": ["website1"]}]"#;
         let repos: Repos = new(json).unwrap();
         assert_eq!(repos, vec![
-            Repo{ repo_type: RepoType::Dam, sites: Some(vec!["dam1".to_string(), "dam2".to_string()]) },
-            Repo{ repo_type: RepoType::Website, sites: Some(vec!["website1".to_string()]) },
+            Repo{ repo_type: repos::RepoType::Dam, sites: Some(vec!["dam1".to_string(), "dam2".to_string()]) },
+            Repo{ repo_type: repos::RepoType::Website, sites: Some(vec!["website1".to_string()]) },
         ]);
     }
 
@@ -120,8 +77,8 @@ mod tests {
         let json = r#"[{"dam": ["dam1","dam2"]}, "website"]"#;
         let repos: Repos = new(json).unwrap();
         assert_eq!(repos, vec![
-            Repo{ repo_type: RepoType::Dam, sites: Some(vec!["dam1".to_string(), "dam2".to_string()]) },
-            Repo{ repo_type: RepoType::Website, sites: None },
+            Repo{ repo_type: repos::RepoType::Dam, sites: Some(vec!["dam1".to_string(), "dam2".to_string()]) },
+            Repo{ repo_type: repos::RepoType::Website, sites: None },
         ]);
     }
 }
