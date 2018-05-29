@@ -56,6 +56,8 @@ lowercase_enum!{
     "users" => (Users, "mgnl:user"), //"mgnl:folder"
 }
 
+pub const FOLDER_NODE_TYPE: &'static str = "mgnl:folder";
+
 #[cfg(test)]
 mod tests {
     use super::*;

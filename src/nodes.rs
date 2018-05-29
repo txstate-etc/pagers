@@ -3,9 +3,7 @@ use serde_json;
 use serde_json::Value;
 use failure::Error;
 use chrono::{DateTime, Local};
-use repos::{self, NodeType};
-
-const FOLDER: &'static str = "mgnl:folder";
+use repos::{self, NodeType, FOLDER_NODE_TYPE};
 
 #[derive(Debug, PartialEq)]
 pub struct Info {
@@ -51,7 +49,7 @@ impl Node {
     }
 
     fn info(&self, repo_type: repos::RepoType, folders: bool) -> Option<Info> {
-        if &self.node_type == repo_type.node_type() || (folders && &self.node_type == FOLDER) {
+        if &self.node_type == repo_type.node_type() || (folders && &self.node_type == FOLDER_NODE_TYPE) {
             for property in &self.properties {
                 if property["name"] == "mgnl:lastModified" {
                     if let Value::Array(ref last_modifieds) = property["values"] {
