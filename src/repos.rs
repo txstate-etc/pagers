@@ -30,7 +30,7 @@ macro_rules! lowercase_enum {
             }
         }
 
-        trait NodeType {
+        pub trait NodeType {
             fn node_type(&self) -> &str;
         }
 

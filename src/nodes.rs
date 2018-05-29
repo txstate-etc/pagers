@@ -3,6 +3,9 @@ use serde_json;
 use serde_json::Value;
 use failure::Error;
 use chrono::{DateTime, Local};
+use repos::{self, NodeType};
+
+const FOLDER: &'static str = "mgnl:folder";
 
 #[derive(Debug, PartialEq)]
 pub struct Info {
@@ -15,9 +18,9 @@ pub type Nodes = Vec<Info>;
 
 
 /// Create Information list of node types from data stream
-pub fn new<R: Read>(data: R, node_type: &str) -> Result<Option<Nodes>, Error> {
+pub fn build<R: Read>(data: R, repo_type: repos::RepoType, folders: bool) -> Result<Option<Nodes>, Error> {
     let node = Node::new(data)?;
-    Ok(node.nodes(node_type))
+    Ok(node.flat_info(repo_type, folders))
 }
 
 // Properties of Nodes. The only object we care about at the moment is the lastModified property.
@@ -47,8 +50,8 @@ impl Node {
         Ok(serde_json::from_reader(data)?)
     }
 
-    fn info(&self, node_type: &str) -> Option<Info> {
-        if &self.node_type == node_type {
+    fn info(&self, repo_type: repos::RepoType, folders: bool) -> Option<Info> {
+        if &self.node_type == repo_type.node_type() || (folders && &self.node_type == FOLDER) {
             for property in &self.properties {
                 if property["name"] == "mgnl:lastModified" {
                     if let Value::Array(ref last_modifieds) = property["values"] {
@@ -69,14 +72,14 @@ impl Node {
         None
     }
 
-    fn nodes(&self, node_type: &str) -> Option<Nodes> {
+    fn flat_info(&self, repo_type: repos::RepoType, folders: bool) -> Option<Nodes> {
         let mut infos = Vec::new();
-        if let Some(info) = self.info(node_type) {
+        if let Some(info) = self.info(repo_type, folders) {
             infos.push(info);
         }
         if let Some(ref nodes) = self.nodes {
             for node in nodes {
-                if let Some(sub_nodes) = node.nodes(node_type) {
+                if let Some(sub_nodes) = node.flat_info(repo_type, folders) {
                     infos.extend(sub_nodes);
                 }
             }
@@ -148,7 +151,7 @@ mod tests {
         ],
         "type": "mgnl:page"
         }"#.as_bytes();
-        let nodes = new(data, "mgnl:page").unwrap();
+        let nodes = build(data, repos::RepoType::Website, false).unwrap();
         assert_eq!(nodes, Some(
             vec![
                 Info{ path: "/gato".to_string(), last_modified: Some("2018-05-05T08:59:29.261-05:00".parse::<DateTime<Local>>().unwrap()) },
@@ -230,7 +233,7 @@ mod tests {
             ],
             "type": "mgnl:folder"
         }"#.as_bytes();
-        let nodes = new(data, "mgnl:asset").unwrap();
+        let nodes = build(data, repos::RepoType::Dam, false).unwrap();
         assert_eq!(nodes, Some(
             vec![
                 Info{ path: "/gato/subpage/basilisk.gif".to_string(), last_modified: Some("2016-06-30T12:17:18.324-05:00".parse::<DateTime<Local>>().unwrap()) },
@@ -257,7 +260,7 @@ mod tests {
             ],
             "type": "mgnl:folder"
         }"#.as_bytes();
-        let nodes = new(data, "mgnl:asset").unwrap();
+        let nodes = build(data, repos::RepoType::Dam, false).unwrap();
         assert_eq!(nodes, None)
     }
 
@@ -324,10 +327,11 @@ mod tests {
             "properties": [],
             "type": "rep:root"
         }"#.as_bytes();
-        let nodes = new(data, "mgnl:folder").unwrap();
+        let nodes = build(data, repos::RepoType::Dam, true).unwrap();
         assert_eq!(nodes, Some(
             vec![
                 Info{ path: "/gato".to_string(), last_modified: None },
+                Info{ path: "/Asset.zip".to_string(), last_modified: None },
         ]));
     }
 }
