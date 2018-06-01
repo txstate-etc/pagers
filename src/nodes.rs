@@ -71,6 +71,9 @@ impl Node {
     }
 
     fn flat_info(&self, repo_type: repos::RepoType, folders: bool) -> Option<Nodes> {
+        if self.path.ends_with("]") {
+            return None;
+        }
         let mut infos = Vec::new();
         if let Some(info) = self.info(repo_type, folders) {
             infos.push(info);
@@ -158,7 +161,10 @@ mod tests {
     }
 
     // curl -s --user '<usr>:<pwd>' -H 'Accept: application/json' '<url>/.rest/nodes/v1/dam/<site>?depth=999&excludeNodeTypes=mgnl:resource&includeMetadata=true' | python -m json.tool
-    // NOTE: we do NOT want folders, only leaf nodes types "mgnl:assets"
+    // We do NOT want folders, only leaf nodes types "mgnl:assets"
+    // We also do not want ambiguous paths such as /gato[2] as 
+    // such duplicate sites are not visible in magnolia, yet are
+    // allowed in JCR. Filter duplicates and associated sub nodes.
     #[test]
     fn test_asset_nodes_for_leaf_nodes_in_dam_repo() {
         let data = r#"{
@@ -188,6 +194,41 @@ mod tests {
                         }
                     ],
                     "path": "/gato/subpage",
+                    "properties": [
+                        {
+                            "multiple": false,
+                            "name": "mgnl:lastModified",
+                            "type": "Date",
+                            "values": [
+                                "2016-06-28T12:17:20.486-05:00"
+                            ]
+                        }
+                    ],
+                    "type": "mgnl:folder"
+                },
+                {
+                    "identifier": "ed9f2988-93c2-455d-b35b-1a188a006031",
+                    "name": "subpage",
+                    "nodes": [
+                        {
+                            "identifier": "079ef347-3808-4d95-806b-a195fde75e2e",
+                            "name": "basilisk.gif",
+                            "nodes": null,
+                            "path": "/gato/subpage[2]/basilisk.gif",
+                            "properties": [
+                                {
+                                    "multiple": false,
+                                    "name": "mgnl:lastModified",
+                                    "type": "Date",
+                                    "values": [
+                                        "2016-06-30T12:17:18.324-05:00"
+                                    ]
+                                }
+                            ],
+                            "type": "mgnl:asset"
+                        }
+                    ],
+                    "path": "/gato/subpage[2]",
                     "properties": [
                         {
                             "multiple": false,
@@ -283,6 +324,23 @@ mod tests {
                     "name": "gato",
                     "nodes": null,
                     "path": "/gato",
+                    "properties": [
+                        {
+                            "multiple": false,
+                            "name": "title",
+                            "type": "String",
+                            "values": [
+                                "gato"
+                            ]
+                        }
+                    ],
+                    "type": "mgnl:folder"
+                },
+                {
+                    "identifier": "7c31a9de-1cb5-41ce-940e-f6716d6cf7ca",
+                    "name": "gato",
+                    "nodes": null,
+                    "path": "/gato[2]",
                     "properties": [
                         {
                             "multiple": false,
