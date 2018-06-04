@@ -61,6 +61,6 @@ fn main() {
         ],
         "type": "mgnl:page"
     }"#.as_bytes();
-    let ps = nodes::build(data, repos::RepoType::Website, false);
+    let ps = nodes::build_paths(data, repos::RepoType::Website, false);
     println!("{:?}", ps);
 }

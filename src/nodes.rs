@@ -6,19 +6,19 @@ use chrono::{DateTime, Local};
 use repos::{self, NodeType, FOLDER_NODE_TYPE};
 
 #[derive(Debug, PartialEq)]
-pub struct Info {
+pub struct PathInfo {
     path: String,
     last_modified: Option<DateTime<Local>>,
 }
 
 /// Information list of Nodes
-pub type Nodes = Vec<Info>;
+pub type Paths = Vec<PathInfo>;
 
 
 /// Create Information list of node types from data stream
-pub fn build<R: Read>(data: R, repo_type: repos::RepoType, folders: bool) -> Result<Option<Nodes>, Error> {
+pub fn build_paths<R: Read>(data: R, repo_type: repos::RepoType, folders: bool) -> Result<Option<Paths>, Error> {
     let node = Node::new(data)?;
-    Ok(node.flat_info(repo_type, folders))
+    Ok(node.flat_paths(repo_type, folders))
 }
 
 // Properties of Nodes. The only object we care about at the moment is the lastModified property.
@@ -48,7 +48,7 @@ impl Node {
         Ok(serde_json::from_reader(data)?)
     }
 
-    fn info(&self, repo_type: repos::RepoType, folders: bool) -> Option<Info> {
+    fn path_info(&self, repo_type: repos::RepoType, folders: bool) -> Option<PathInfo> {
         if &self.node_type == repo_type.node_type() || (folders && &self.node_type == FOLDER_NODE_TYPE) {
             for property in &self.properties {
                 if property["name"] == "mgnl:lastModified" {
@@ -56,7 +56,7 @@ impl Node {
                         match last_modifieds.last() {
                             Some(&Value::String(ref last_modified)) => {
                                 if let Ok(last_modified) = last_modified.parse::<DateTime<Local>>() {
-                                    return Some(Info{ path: self.path.clone(), last_modified: Some(last_modified) });
+                                    return Some(PathInfo{ path: self.path.clone(), last_modified: Some(last_modified) });
                                 }
                                 ()
                             },
@@ -65,28 +65,28 @@ impl Node {
                     }
                 }
             }
-            return Some(Info{ path: self.path.clone(), last_modified: None })
+            return Some(PathInfo{ path: self.path.clone(), last_modified: None })
         }
         None
     }
 
-    fn flat_info(&self, repo_type: repos::RepoType, folders: bool) -> Option<Nodes> {
+    fn flat_paths(&self, repo_type: repos::RepoType, folders: bool) -> Option<Paths> {
         if self.path.ends_with("]") {
             return None;
         }
-        let mut infos = Vec::new();
-        if let Some(info) = self.info(repo_type, folders) {
-            infos.push(info);
+        let mut paths = Vec::new();
+        if let Some(path_info) = self.path_info(repo_type, folders) {
+            paths.push(path_info);
         }
         if let Some(ref nodes) = self.nodes {
             for node in nodes {
-                if let Some(sub_nodes) = node.flat_info(repo_type, folders) {
-                    infos.extend(sub_nodes);
+                if let Some(sub_nodes) = node.flat_paths(repo_type, folders) {
+                    paths.extend(sub_nodes);
                 }
             }
         }
-        if infos.len() > 0 {
-            Some(infos)
+        if paths.len() > 0 {
+            Some(paths)
         } else {
             None
         }
@@ -97,7 +97,7 @@ impl Node {
 mod tests {
     use super::*;
 
-    // curl --user '<usr:pwd>' -H 'Accept: application/json' '<url>/.rest/nodes/v1/website/<site>?depth=999&excludeNodeTypes=mgnl:resource,mgnl:content,mgnl:contentNode,mgnl:area,mgnl:component,mgnl:user,mgnl:group,mgnl:role,mgnl:folder,mgnl:metaData,mgnl:nodeData,mgnl:reserve&includeMetadata=true' | python -m json.tool
+    // curl -s -H 'Accept: application/json' '<url>/.rest/nodes/v1/website/<site>?depth=999&excludeNodeTypes=mgnl:resource&includeMetadata=true' | python -m json.tool
     #[test]
     fn test_page_nodes_for_tree_structure_of_website_repo() {
         let data = r#"{
@@ -152,15 +152,15 @@ mod tests {
         ],
         "type": "mgnl:page"
         }"#.as_bytes();
-        let nodes = build(data, repos::RepoType::Website, false).unwrap();
-        assert_eq!(nodes, Some(
+        let paths = build_paths(data, repos::RepoType::Website, false).unwrap();
+        assert_eq!(paths, Some(
             vec![
-                Info{ path: "/gato".to_string(), last_modified: Some("2018-05-05T08:59:29.261-05:00".parse::<DateTime<Local>>().unwrap()) },
-                Info{ path: "/gato/las-communications".to_string(), last_modified: Some("2018-02-20T17:30:14.383-06:00".parse::<DateTime<Local>>().unwrap()) },
+                PathInfo{ path: "/gato".to_string(), last_modified: Some("2018-05-05T08:59:29.261-05:00".parse::<DateTime<Local>>().unwrap()) },
+                PathInfo{ path: "/gato/las-communications".to_string(), last_modified: Some("2018-02-20T17:30:14.383-06:00".parse::<DateTime<Local>>().unwrap()) },
        ]));
     }
 
-    // curl -s --user '<usr>:<pwd>' -H 'Accept: application/json' '<url>/.rest/nodes/v1/dam/<site>?depth=999&excludeNodeTypes=mgnl:resource&includeMetadata=true' | python -m json.tool
+    // curl -s -H 'Accept: application/json' '<url>/.rest/nodes/v1/dam/<site>?depth=999&excludeNodeTypes=mgnl:resource&includeMetadata=true' | python -m json.tool
     // We do NOT want folders, only leaf nodes types "mgnl:assets"
     // We also do not want ambiguous paths such as /gato[2] as 
     // such duplicate sites are not visible in magnolia, yet are
@@ -272,11 +272,11 @@ mod tests {
             ],
             "type": "mgnl:folder"
         }"#.as_bytes();
-        let nodes = build(data, repos::RepoType::Dam, false).unwrap();
-        assert_eq!(nodes, Some(
+        let paths = build_paths(data, repos::RepoType::Dam, false).unwrap();
+        assert_eq!(paths, Some(
             vec![
-                Info{ path: "/gato/subpage/basilisk.gif".to_string(), last_modified: Some("2016-06-30T12:17:18.324-05:00".parse::<DateTime<Local>>().unwrap()) },
-                Info{ path: "/gato/rssfeed.png".to_string(), last_modified: Some("2018-05-18T09:53:36.380-05:00".parse::<DateTime<Local>>().unwrap()) },
+                PathInfo{ path: "/gato/subpage/basilisk.gif".to_string(), last_modified: Some("2016-06-30T12:17:18.324-05:00".parse::<DateTime<Local>>().unwrap()) },
+                PathInfo{ path: "/gato/rssfeed.png".to_string(), last_modified: Some("2018-05-18T09:53:36.380-05:00".parse::<DateTime<Local>>().unwrap()) },
         ]));
     }
 
@@ -299,12 +299,12 @@ mod tests {
             ],
             "type": "mgnl:folder"
         }"#.as_bytes();
-        let nodes = build(data, repos::RepoType::Dam, false).unwrap();
+        let nodes = build_paths(data, repos::RepoType::Dam, false).unwrap();
         assert_eq!(nodes, None)
     }
 
     // Given data from repo with depth of 1, return back a list of sites under that repo
-    // curl -s --user '<usr>:<pwd>' -H 'Accept: application/json' '<url>/.rest/nodes/v1/<repo>/?depth=1&excludeNodeTypes=mgnl:resource' | python -m json.tool
+    // curl -s -H 'Accept: application/json' '<url>/.rest/nodes/v1/<repo>/?depth=1&excludeNodeTypes=mgnl:resource' | python -m json.tool
     #[test]
     fn test_folder_nodes_for_sites_in_dam_repo() {
         let data = r#"{
@@ -383,11 +383,11 @@ mod tests {
             "properties": [],
             "type": "rep:root"
         }"#.as_bytes();
-        let nodes = build(data, repos::RepoType::Dam, true).unwrap();
-        assert_eq!(nodes, Some(
+        let paths = build_paths(data, repos::RepoType::Dam, true).unwrap();
+        assert_eq!(paths, Some(
             vec![
-                Info{ path: "/gato".to_string(), last_modified: None },
-                Info{ path: "/Asset.zip".to_string(), last_modified: None },
+                PathInfo{ path: "/gato".to_string(), last_modified: None },
+                PathInfo{ path: "/Asset.zip".to_string(), last_modified: None },
         ]));
     }
 }
