@@ -3,10 +3,11 @@ use serde_json;
 use serde_json::Value;
 use failure::Error;
 use chrono::{DateTime, Local};
-use repos::{self, NodeType, FOLDER_NODE_TYPE};
+use repos::{RepoType, NodeType, FOLDER_NODE_TYPE};
 
 #[derive(Debug, PartialEq)]
 pub struct PathInfo {
+    repo_type: RepoType,
     path: String,
     last_modified: Option<DateTime<Local>>,
 }
@@ -16,7 +17,7 @@ pub type Paths = Vec<PathInfo>;
 
 
 /// Create Information list of node types from data stream
-pub fn build_paths<R: Read>(data: R, repo_type: repos::RepoType, folders: bool) -> Result<Option<Paths>, Error> {
+pub fn build_paths<R: Read>(data: R, repo_type: RepoType, folders: bool) -> Result<Option<Paths>, Error> {
     let node = Node::new(data)?;
     Ok(node.flat_paths(repo_type, folders))
 }
@@ -48,7 +49,7 @@ impl Node {
         Ok(serde_json::from_reader(data)?)
     }
 
-    fn path_info(&self, repo_type: repos::RepoType, folders: bool) -> Option<PathInfo> {
+    fn path_info(&self, repo_type: RepoType, folders: bool) -> Option<PathInfo> {
         if &self.node_type == repo_type.node_type() || (folders && &self.node_type == FOLDER_NODE_TYPE) {
             for property in &self.properties {
                 if property["name"] == "mgnl:lastModified" {
@@ -56,7 +57,7 @@ impl Node {
                         match last_modifieds.last() {
                             Some(&Value::String(ref last_modified)) => {
                                 if let Ok(last_modified) = last_modified.parse::<DateTime<Local>>() {
-                                    return Some(PathInfo{ path: self.path.clone(), last_modified: Some(last_modified) });
+                                    return Some(PathInfo{ repo_type: repo_type, path: self.path.clone(), last_modified: Some(last_modified) });
                                 }
                                 ()
                             },
@@ -65,12 +66,12 @@ impl Node {
                     }
                 }
             }
-            return Some(PathInfo{ path: self.path.clone(), last_modified: None })
+            return Some(PathInfo{ repo_type: repo_type, path: self.path.clone(), last_modified: None })
         }
         None
     }
 
-    fn flat_paths(&self, repo_type: repos::RepoType, folders: bool) -> Option<Paths> {
+    fn flat_paths(&self, repo_type: RepoType, folders: bool) -> Option<Paths> {
         if self.path.ends_with("]") {
             return None;
         }
@@ -152,11 +153,11 @@ mod tests {
         ],
         "type": "mgnl:page"
         }"#.as_bytes();
-        let paths = build_paths(data, repos::RepoType::Website, false).unwrap();
+        let paths = build_paths(data, RepoType::Website, false).unwrap();
         assert_eq!(paths, Some(
             vec![
-                PathInfo{ path: "/gato".to_string(), last_modified: Some("2018-05-05T08:59:29.261-05:00".parse::<DateTime<Local>>().unwrap()) },
-                PathInfo{ path: "/gato/las-communications".to_string(), last_modified: Some("2018-02-20T17:30:14.383-06:00".parse::<DateTime<Local>>().unwrap()) },
+                PathInfo{ repo_type: RepoType::Website, path: "/gato".to_string(), last_modified: Some("2018-05-05T08:59:29.261-05:00".parse::<DateTime<Local>>().unwrap()) },
+                PathInfo{ repo_type: RepoType::Website, path: "/gato/las-communications".to_string(), last_modified: Some("2018-02-20T17:30:14.383-06:00".parse::<DateTime<Local>>().unwrap()) },
        ]));
     }
 
@@ -272,11 +273,11 @@ mod tests {
             ],
             "type": "mgnl:folder"
         }"#.as_bytes();
-        let paths = build_paths(data, repos::RepoType::Dam, false).unwrap();
+        let paths = build_paths(data, RepoType::Dam, false).unwrap();
         assert_eq!(paths, Some(
             vec![
-                PathInfo{ path: "/gato/subpage/basilisk.gif".to_string(), last_modified: Some("2016-06-30T12:17:18.324-05:00".parse::<DateTime<Local>>().unwrap()) },
-                PathInfo{ path: "/gato/rssfeed.png".to_string(), last_modified: Some("2018-05-18T09:53:36.380-05:00".parse::<DateTime<Local>>().unwrap()) },
+                PathInfo{ repo_type: RepoType::Dam, path: "/gato/subpage/basilisk.gif".to_string(), last_modified: Some("2016-06-30T12:17:18.324-05:00".parse::<DateTime<Local>>().unwrap()) },
+                PathInfo{ repo_type: RepoType::Dam, path: "/gato/rssfeed.png".to_string(), last_modified: Some("2018-05-18T09:53:36.380-05:00".parse::<DateTime<Local>>().unwrap()) },
         ]));
     }
 
@@ -299,7 +300,7 @@ mod tests {
             ],
             "type": "mgnl:folder"
         }"#.as_bytes();
-        let nodes = build_paths(data, repos::RepoType::Dam, false).unwrap();
+        let nodes = build_paths(data, RepoType::Dam, false).unwrap();
         assert_eq!(nodes, None)
     }
 
@@ -383,11 +384,11 @@ mod tests {
             "properties": [],
             "type": "rep:root"
         }"#.as_bytes();
-        let paths = build_paths(data, repos::RepoType::Dam, true).unwrap();
+        let paths = build_paths(data, RepoType::Dam, true).unwrap();
         assert_eq!(paths, Some(
             vec![
-                PathInfo{ path: "/gato".to_string(), last_modified: None },
-                PathInfo{ path: "/Asset.zip".to_string(), last_modified: None },
+                PathInfo{ repo_type: RepoType::Dam, path: "/gato".to_string(), last_modified: None },
+                PathInfo{ repo_type: RepoType::Dam, path: "/Asset.zip".to_string(), last_modified: None },
         ]));
     }
 }
