@@ -5,11 +5,14 @@ use failure::Error;
 use chrono::{DateTime, Local};
 use repos::{RepoType, NodeType, FOLDER_NODE_TYPE};
 
+/// PathInfo structure holds the associated repo type,
+/// the absolute path of the node with regards to the repo,
+/// and the last time the node was modified.
 #[derive(Debug, PartialEq)]
 pub struct PathInfo {
-    repo_type: RepoType,
-    path: String,
-    last_modified: Option<DateTime<Local>>,
+    pub repo_type: RepoType,
+    pub path: String,
+    pub last_modified: Option<DateTime<Local>>,
 }
 
 /// Information list of Nodes
@@ -49,6 +52,7 @@ impl Node {
         Ok(serde_json::from_reader(data)?)
     }
 
+    // consumes Node to generate PathInfo
     fn path_info(&self, repo_type: RepoType, folders: bool) -> Option<PathInfo> {
         if &self.node_type == repo_type.node_type() || (folders && &self.node_type == FOLDER_NODE_TYPE) {
             for property in &self.properties {
@@ -57,7 +61,7 @@ impl Node {
                         match last_modifieds.last() {
                             Some(&Value::String(ref last_modified)) => {
                                 if let Ok(last_modified) = last_modified.parse::<DateTime<Local>>() {
-                                    return Some(PathInfo{ repo_type: repo_type, path: self.path.clone(), last_modified: Some(last_modified) });
+                                    return Some(PathInfo{ repo_type: repo_type, path: self.path.to_owned(), last_modified: Some(last_modified) });
                                 }
                                 ()
                             },

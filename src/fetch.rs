@@ -1,11 +1,12 @@
+use std::io;
 use repos::RepoType;
-use nodes::{self, Paths};
+use nodes::{self, Paths, PathInfo};
 use failure::{Error, err_msg};
 //use chrono;
 use percent_encoding::percent_decode;
 use regex::Regex;
 use reqwest::Client;
-use hyper::header::{Cookie, Accept, qitem};
+use hyper::header::{Cookie, Referer, Accept, qitem};
 use hyper::{Uri, mime};
 
 lazy_static!{
@@ -48,7 +49,7 @@ impl Fetch {
         let uri = url.parse::<Uri>().unwrap();
         // Extract user and password as we only want to
         // use those to initialy generate a session.
-        let url = format!("{}://{}:{}{}", uri.scheme().unwrap(), uri.host().unwrap(), uri.port().unwrap(), uri.path());
+        let url = format!("{}://{}:{}{}", uri.scheme().unwrap(), uri.host().unwrap(), uri.port().unwrap(), uri.path().trim_right_matches("/"));
         let (user, password) = split_authority(uri.authority())?;
         let mut fetch = Fetch{
             url: url.to_string(),
@@ -111,20 +112,19 @@ impl Fetch {
 
     /// Fetch list of node paths for all sites within a repo and include the associated mgnl:lastModified properties found in nodes Metadata:
     ///   NOTE: Exclude 'mgnl:resources' from magnolia RESTful json responses as they include binary data we do NOT require.
-    /// For all paths within repo
-    ///   curl -s -H 'Accept: application/json' '<url>/.rest/nodes/v1/<repo>?depth=999&excludeNodeTypes=mgnl:resource&includeMetadata=true'
-    /// TODO: For sites within repo in which case we can loop through a Repo structure which contains list of sites.
+    /// For all paths within repo while NOT including mgnl:folders
     ///   curl -s -H 'Accept: application/json' '<url>/.rest/nodes/v1/<repo>/<site>?depth=999&excludeNodeTypes=mgnl:resource&includeMetadata=true'
-    pub fn paths(&self, repo_type: RepoType) -> Result<Option<Paths>, Error> {
+    pub fn paths(&self, path_info: &PathInfo) -> Result<Option<Paths>, Error> {
         let mut cookie_session = Cookie::new();
         cookie_session.append("JSESSIONID", self.session.as_ref().unwrap().to_string());
-        let url = format!("{}/.rest/nodes/v1/{}?depth=999&excludeNodeTypes=mgnl:resource&includeMetadata=true", self.url, repo_type);
+        let url = format!("{}/.rest/nodes/v1/{}{}?depth=999&excludeNodeTypes=mgnl:resource&includeMetadata=true", self.url, path_info.repo_type, path_info.path);
+        println!("  check: {}", url);
         let resp = self.client.get(&url)
             .header(cookie_session)
             .header(Accept(vec![qitem(mime::APPLICATION_JSON)]))
             .send()?;
         if resp.status().is_success() {
-            Ok(nodes::build_paths(resp, repo_type, false)?)
+            Ok(nodes::build_paths(resp, path_info.repo_type, false)?)
         } else {
             Err(err_msg("Unable to retrieve list of sites for repo"))
         }
@@ -146,11 +146,28 @@ impl Fetch {
     //   NOTE: Export requests require a 'referer' header as a security feature.
     //   NOTE: An export jsp was added as Magnolia put their export features behind an interactive Vaadin framework.
     //   curl -s --fail --cookie '<SessionID>' \
-    //     --referer '<URL>/.magnolia/pages/export.html' \
-    //     --data "mgnlRepository=<Repo>&mgnlPath=</Path>&ext=.xml&command=exportxml&exportxml=Export&mgnlKeepVersions=true' \
-    //     '<URL>/.magnolia/pages/export.html'
-    pub fn export(&self, _repo_type: RepoType, _path: String) -> Result<(), Error> {
-        Ok(())
+    //     '<URL>/docroot/gato/export.jsp?repo=<repo>&path=</path>'
+    pub fn export(&self, path_info: &PathInfo) -> Result<(), Error> {
+        let mut cookie_session = Cookie::new();
+        cookie_session.append("JSESSIONID", self.session.as_ref().unwrap().to_string());
+        let url = format!("{}/docroot/gato/export.jsp", &self.url);
+        let mut resp = self.client.get(&url)
+            .header(cookie_session)
+            .header(Accept(vec![qitem(mime::TEXT_XML)]))
+            .header(Referer::new(url))
+            .query(&[
+                ("repo", path_info.repo_type.to_string()),
+                ("path", path_info.path.clone()),
+            ])
+            .send()?;
+        if resp.status().is_success() {
+            let mut stdout = io::stdout();
+            match io::copy(&mut resp, &mut stdout) {
+                Ok(_) => Ok(()),
+                Err(_) => Err(err_msg("")),
+            }
+        } else {
+            Err(err_msg(""))
+        }
     }
 }
-
