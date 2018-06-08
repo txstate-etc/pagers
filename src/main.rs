@@ -14,7 +14,6 @@ pub mod nodes;
 pub mod fetch;
 pub mod backup;
 
-use nodes::PathInfo;
 use std::env;
 use fetch::Fetch;
 
@@ -49,7 +48,7 @@ fn main() {
             if let Ok(Some(paths)) = magnolia.paths(&site) {
                 for path in paths {
                     //magnolia.export(nodes::PathInfo{repo_type: repos::RepoType::Dam, path: "/banner-images/JavelinaStampBWlarge.jpg".to_string(), last_modified: None}).unwrap();
-                    println!("    {}", backup::name(&site, &path, "20180607"));
+                    println!("    {}", backup::name(&site, &path, &ARCHIVE_EXT));
                 }
             }
         }
