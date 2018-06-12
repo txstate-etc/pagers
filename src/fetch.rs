@@ -6,7 +6,7 @@ use failure::{Error, err_msg};
 use percent_encoding::percent_decode;
 use regex::Regex;
 use reqwest::Client;
-use hyper::header::{Cookie, Referer, Accept, qitem};
+use hyper::header::{Cookie, Referer, Accept, qitem, ContentLength};
 use hyper::{Uri, mime};
 
 lazy_static!{
@@ -76,7 +76,7 @@ impl Fetch {
             .basic_auth(&*self.user, Some(&*self.password))
             .send()?;
         if !resp.status().is_success() {
-            println!("Status: {}", resp.status());
+            //println!("ERROR: Status: {}", resp.status());
             return Err(err_msg("Invalid response. Unable to retrieve a session."))
         }
         for header_view in resp.headers().iter() {
@@ -113,12 +113,11 @@ impl Fetch {
     /// Fetch list of node paths for all sites within a repo and include the associated mgnl:lastModified properties found in nodes Metadata:
     ///   NOTE: Exclude 'mgnl:resources' from magnolia RESTful json responses as they include binary data we do NOT require.
     /// For all paths within repo while NOT including mgnl:folders
-    ///   curl -s -H 'Accept: application/json' '<url>/.rest/nodes/v1/<repo>/<site>?depth=999&excludeNodeTypes=mgnl:resource&includeMetadata=true'
+    ///   curl -s -H 'Accept: application/json' '<url>/.rest/nodes/v1/<repo>/<site/path>?depth=999&excludeNodeTypes=mgnl:resource&includeMetadata=true'
     pub fn paths(&self, path_info: &PathInfo) -> Result<Option<Paths>, Error> {
         let mut cookie_session = Cookie::new();
         cookie_session.append("JSESSIONID", self.session.as_ref().unwrap().to_string());
         let url = format!("{}/.rest/nodes/v1/{}{}?depth=999&excludeNodeTypes=mgnl:resource&includeMetadata=true", self.url, path_info.repo_type, path_info.path);
-        println!("  check: {}", url);
         let resp = self.client.get(&url)
             .header(cookie_session)
             .header(Accept(vec![qitem(mime::APPLICATION_JSON)]))
@@ -127,6 +126,25 @@ impl Fetch {
             Ok(nodes::build_paths(resp, path_info.repo_type, false)?)
         } else {
             Err(err_msg("Unable to retrieve list of sites for repo"))
+        }
+    }
+
+    /// Was going to have magnolia return back Content-Length of path, however,
+    /// both export.jsp and restful interfaces only return back chunked responses
+    /// which does NOT contain a content length header. Instead we will request
+    /// the actual document. WARN: This may only work for dam.
+    pub fn doc_size(&self, path_info: &PathInfo) -> Result<Option<u64>, Error> {
+        let mut cookie_session = Cookie::new();
+        cookie_session.append("JSESSIONID", self.session.as_ref().unwrap().to_string());
+        let url = format!("{}/{}{}", self.url, path_info.repo_type, path_info.path);
+        println!("  check: {}", url);
+        let resp = self.client.head(&url)
+            .header(cookie_session)
+            .send()?;
+        if resp.status().is_success() {
+            Ok(resp.headers().get::<ContentLength>().map(|ct_len| **ct_len))
+        } else {
+            Err(err_msg("Unable to retrieve document for repo"))
         }
     }
 

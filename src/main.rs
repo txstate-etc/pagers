@@ -6,6 +6,7 @@ extern crate percent_encoding;
 extern crate regex;
 extern crate failure;
 extern crate chrono;
+extern crate crossbeam_channel;
 extern crate reqwest;
 extern crate hyper;
 
@@ -14,6 +15,8 @@ pub mod nodes;
 pub mod fetch;
 pub mod backup;
 
+use std::thread;
+use crossbeam_channel as channel;
 use std::env;
 use fetch::Fetch;
 
@@ -40,17 +43,51 @@ lazy_static!{
     };
 }
 
-fn main() {
-    let magnolia = Fetch::new(&*BACKUP_URLS[0]).unwrap();
+/// PREVIOUS_EXT environment variable is generally used to
+/// indicate the date used the backups the previous daily backup
+/// like /repo/site.20180617/...
+lazy_static!{
+    static ref PREVIOUS_EXT: String = {
+        match env::var("PREVIOUS_EXT") {
+            Ok(ext) => ext,
+            Err(_) => panic!("Require an archive extension"),
+        }
+    };
+}
+
+fn run(backup_urls: &Vec<String>, archive_ext: &'static str, previous_ext: &'static str) {
+    let primary_url = backup_urls.first().unwrap().clone();
+    let (s, r) = channel::unbounded();
+    for (thread_n, url) in backup_urls.iter().enumerate() {
+        let thread_magnolia = Fetch::new(url).unwrap();
+        let thread_r = r.clone();
+        thread::spawn(move || {
+            while let Some(path) = thread_r.recv() {
+                //thread_magnolia.export(&path).unwrap();
+                match thread_magnolia.doc_size(&path) {
+                    Ok(len) => println!("INFO[{}]: size={:?}: {}", thread_n, len, backup::name(&path, archive_ext, previous_ext)),
+                    Err(e) => println!("ERROR[{}]: {}{}: {}", thread_n, path.repo_type, path.path, e),
+                }
+            }
+        });
+    }
+
+    let magnolia = Fetch::new(&primary_url).unwrap();
     if let Ok(Some(sites)) = magnolia.sites(repos::RepoType::Dam) {
         for site in sites {
-            println!("----------------- {}{}", site.repo_type.to_string(), site.path);
+            //TODO: generate archive site folder
+            //println!("----------------- {}{}", site.repo_type.to_string(), site.path);
             if let Ok(Some(paths)) = magnolia.paths(&site) {
                 for path in paths {
-                    //magnolia.export(nodes::PathInfo{repo_type: repos::RepoType::Dam, path: "/banner-images/JavelinaStampBWlarge.jpg".to_string(), last_modified: None}).unwrap();
-                    println!("    {}", backup::name(&site, &path, &ARCHIVE_EXT));
+                    println!("DEBUG: path: {}", path.path);
+                    s.send(path);
                 }
             }
         }
     }
+}
+
+fn main() {
+    run(&*BACKUP_URLS, &ARCHIVE_EXT, &PREVIOUS_EXT);
+    println!("Done");
 }
