@@ -1,4 +1,3 @@
-use std::io;
 use repos::RepoType;
 use nodes::{self, Paths, PathInfo};
 use failure::{Error, err_msg};
@@ -8,6 +7,7 @@ use regex::Regex;
 use reqwest::Client;
 use hyper::header::{Cookie, Referer, Accept, qitem, ContentLength};
 use hyper::{Uri, mime};
+use std::io::Read;
 
 lazy_static!{
     static ref RE_JSESSIONID: Regex = Regex::new(r"^JSESSIONID=([A-F0-9]{32})[; ]").unwrap();
@@ -164,11 +164,11 @@ impl Fetch {
     //   NOTE: An export jsp was added as Magnolia put their export features behind an interactive Vaadin framework.
     //   curl -s --fail --cookie '<SessionID>' \
     //     '<URL>/docroot/gato/export.jsp?repo=<repo>&path=</path>'
-    pub fn export(&self, path_info: &PathInfo) -> Result<(), Error> {
+    pub fn export(&self, path_info: &PathInfo) -> Result<Box<Read>, Error> {
         let mut cookie_session = Cookie::new();
         cookie_session.append("JSESSIONID", self.session.as_ref().unwrap().to_string());
         let url = format!("{}/docroot/gato/export.jsp", &self.url);
-        let mut resp = self.client.get(&url)
+        let resp = self.client.get(&url)
             .header(cookie_session)
             .header(Accept(vec![qitem(mime::TEXT_XML)]))
             .header(Referer::new(url))
@@ -178,11 +178,7 @@ impl Fetch {
             ])
             .send()?;
         if resp.status().is_success() {
-            let mut stdout = io::stdout();
-            match io::copy(&mut resp, &mut stdout) {
-                Ok(_) => Ok(()),
-                Err(_) => Err(err_msg("")),
-            }
+            Ok(Box::new(resp))
         } else {
             Err(err_msg(""))
         }
