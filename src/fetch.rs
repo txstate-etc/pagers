@@ -137,7 +137,6 @@ impl Fetch {
         let mut cookie_session = Cookie::new();
         cookie_session.append("JSESSIONID", self.session.as_ref().unwrap().to_string());
         let url = format!("{}/{}{}", self.url, path_info.repo_type, path_info.path);
-        println!("  check: {}", url);
         let resp = self.client.head(&url)
             .header(cookie_session)
             .send()?;

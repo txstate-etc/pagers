@@ -55,17 +55,28 @@ lazy_static!{
     };
 }
 
-fn run(backup_urls: &Vec<String>, archive_ext: &'static str, previous_ext: &'static str) {
+/// ARCHIVE_DIR envirnomen variable holds the backup location
+/// in the filesystem.
+lazy_static!{
+    static ref ARCHIVE_DIR: String = {
+        match env::var("ARCHIVE_DIR") {
+            Ok(dir) => dir,
+            Err(_) => panic!("Require an archive directory"),
+        }
+    };
+}
+
+fn run(backup_urls: &Vec<String>, archive_dir: &'static str, archive_ext: &'static str, _previous_ext: &'static str) {
     let primary_url = backup_urls.first().unwrap().clone();
-    let (s, r) = channel::unbounded();
+    let (s, r) = channel::bounded(0);
     for (thread_n, url) in backup_urls.iter().enumerate() {
         let thread_magnolia = Fetch::new(url).unwrap();
         let thread_r = r.clone();
         thread::spawn(move || {
-            while let Some(path) = thread_r.recv() {
+            for path in thread_r {
                 //thread_magnolia.export(&path).unwrap();
                 match thread_magnolia.doc_size(&path) {
-                    Ok(len) => println!("INFO[{}]: size={:?}: {}", thread_n, len, backup::name(&path, archive_ext, previous_ext)),
+                    Ok(len) => println!("INFO[{}]: size={:?}: {}/{}", thread_n, len, backup::archive_path(archive_dir, archive_ext, &path), backup::backup_filename(&path)),
                     Err(e) => println!("ERROR[{}]: {}{}: {}", thread_n, path.repo_type, path.path, e),
                 }
             }
@@ -76,10 +87,9 @@ fn run(backup_urls: &Vec<String>, archive_ext: &'static str, previous_ext: &'sta
     if let Ok(Some(sites)) = magnolia.sites(repos::RepoType::Dam) {
         for site in sites {
             //TODO: generate archive site folder
-            //println!("----------------- {}{}", site.repo_type.to_string(), site.path);
             if let Ok(Some(paths)) = magnolia.paths(&site) {
                 for path in paths {
-                    println!("DEBUG: path: {}", path.path);
+                    //println!("DEBUG: dam: {} path: {}", path.repo_type, path.path);
                     s.send(path);
                 }
             }
@@ -88,6 +98,6 @@ fn run(backup_urls: &Vec<String>, archive_ext: &'static str, previous_ext: &'sta
 }
 
 fn main() {
-    run(&*BACKUP_URLS, &ARCHIVE_EXT, &PREVIOUS_EXT);
+    run(&*BACKUP_URLS, &ARCHIVE_DIR, &ARCHIVE_EXT, &PREVIOUS_EXT);
     println!("Done");
 }
