@@ -1,6 +1,6 @@
 [package]
-name = "testing"
-version = "0.1.0"
+name = "pagers"
+version = "1.0.0"
 authors = ["Charles Tabor <ct37@txstate.edu>"]
 
 [dependencies]
