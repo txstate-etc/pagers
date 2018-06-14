@@ -83,23 +83,32 @@ fn run(backup_urls: &Vec<String>, archive_dir: &'static str, archive_ext: &'stat
                 let previous_file = format!("{}/{}", backup::archive_path(archive_dir, previous_ext, &path), backup::backup_filename(&path));
                 let archive_file = format!("{}/{}", backup::archive_path(archive_dir, archive_ext, &path), backup::backup_filename(&path));
                 if let Ok(p_meta) = fs::metadata(&previous_file) {
-                     if let Ok(p_modified) = p_meta.modified() {
-                         if Some(DateTime::from(p_modified)) == path.last_modified {
-                             if let Err(e) = fs::hard_link(&previous_file, &archive_file) {
-                                 println!("ERROR: {}, {}", &path.path, e);
-                             }
-                             let timestamp = FileTime::from_unix_time(path.last_modified.unwrap().timestamp(), path.last_modified.unwrap().timestamp_subsec_nanos());
-                             if let Err(e) = set_file_times(&archive_file, timestamp, timestamp) {
-                                 println!("ERROR: {}, {}", &path.path, e);
-                             }
-                             continue;
-                         }
-                     }
+                    if let Ok(p_modified) = p_meta.modified() {
+                        if Some(DateTime::from(p_modified)) == path.last_modified {
+                            if let Err(e) = fs::hard_link(&previous_file, &archive_file) {
+                                println!("ERROR: {}, {}", &path.path, e);
+                            }
+                            let timestamp = FileTime::from_unix_time(path.last_modified.unwrap().timestamp(), path.last_modified.unwrap().timestamp_subsec_nanos());
+                            if let Err(e) = set_file_times(&archive_file, timestamp, timestamp) {
+                                println!("ERROR: {}, {}", &path.path, e);
+                            }
+                            continue;
+                        } else {
+                            println!("INFO[{}] skip {}", thread_n, &path.path);
+                        }
+                    }
                 }
-                if let Ok(mut file) = File::create(archive_file) {
+                if let Ok(mut file) = File::create(&archive_file) {
                     if let Ok(mut export) = thread_magnolia.export(&path) {
                         match io::copy(&mut export, &mut file) {
-                            Ok(size) => println!("INFO[{}] exported {} bytes {}", thread_n, size, &path.path), 
+                            Ok(size) => {
+                                let timestamp = FileTime::from_unix_time(path.last_modified.unwrap().timestamp(), path.last_modified.unwrap().timestamp_subsec_nanos());
+                                if let Err(e) = set_file_times(&archive_file, timestamp, timestamp) {
+                                    println!("ERROR: {}, {}", &path.path, e);
+                                } else {
+                                    println!("INFO[{}] exported {} bytes {}", thread_n, size, &path.path);
+                                }
+                            },
                             Err(e) => println!("ERROR[{}] failed {}, {}", thread_n, &path.path, e),
                         }
                     }
