@@ -2,9 +2,11 @@
 magnolia per page backup service
 
 ## Build
+```
 alias rust-musl-builder='docker run --rm -it -v "$(pwd)":/home/rust/src ekidd/rust-musl-builder'
 rust-musl-builder cargo build --release
 scp target/x86_64-unknown-linux-musl/release/pagers <destination>
+```
 
 ## Environment
 * ARCHIVE_DIR=/mnt/<path_to_nfs>/v2
