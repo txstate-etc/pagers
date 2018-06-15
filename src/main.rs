@@ -75,7 +75,7 @@ lazy_static!{
 
 fn run(backup_urls: &Vec<String>, archive_dir: &'static str, archive_ext: &'static str, previous_ext: &'static str) {
     let primary_url = backup_urls.first().unwrap().clone();
-    let (s, r) = channel::unbounded();
+    let (s, r) = channel::bounded(backup_urls.len());
     for (thread_n, url) in backup_urls.iter().enumerate() {
         let thread_r = r.clone();
         let thread_url = url.clone();
@@ -89,11 +89,11 @@ fn run(backup_urls: &Vec<String>, archive_dir: &'static str, archive_ext: &'stat
                     if let Ok(p_modified) = p_meta.modified() {
                         if Some(DateTime::from(p_modified)) == path.last_modified {
                             if let Err(e) = fs::hard_link(&previous_file, &archive_file) {
-                                println!("ERROR: {}, {}", &path.path, e);
+                                println!("ERROR[{}]: {}, {}", thread_n, &path.path, e);
                             }
                             let timestamp = FileTime::from_unix_time(path.last_modified.unwrap().timestamp(), path.last_modified.unwrap().timestamp_subsec_nanos());
                             if let Err(e) = set_file_times(&archive_file, timestamp, timestamp) {
-                                println!("ERROR: {}, {}", &path.path, e);
+                                println!("ERROR[{}]: {}, {}", thread_n, &path.path, e);
                             }
                             continue;
                         }
@@ -108,35 +108,35 @@ fn run(backup_urls: &Vec<String>, archive_dir: &'static str, archive_ext: &'stat
                                     Ok(size) => {
                                         let timestamp = FileTime::from_unix_time(path.last_modified.unwrap().timestamp(), path.last_modified.unwrap().timestamp_subsec_nanos());
                                         if let Err(e) = set_file_times(&archive_file, timestamp, timestamp) {
-                                            println!("ERROR: {}, {}", &path.path, e);
+                                            println!("ERROR[{}]: {}, {}", thread_n, &path.path, e);
                                         } else {
-                                            println!("INFO[{}] exported {} bytes {}", thread_n, size, &path.path);
+                                            println!("INFO[{}]: Exported {} bytes {}", thread_n, size, &path.path);
                                         }
                                     },
                                     // TODO: Remove file if bad copy.
-                                    Err(e) => println!("ERROR[{}] failed {}, {}", thread_n, &path.path, e),
+                                    Err(e) => println!("ERROR[{}]: Export failed {}, {}", thread_n, &path.path, e),
                                 }
                                 retry = false;
                             },
                             Err(FetchError::LostSession{error: e}) => {
-                                println!("WARN[{}] {}, {}", thread_n, &path.path, e);
+                                println!("WARN[{}]: {}, {}", thread_n, &path.path, e);
                                 if let Err(e) = magnolia.new_client() {
-                                    println!("ERROR[{}] {}, {}", thread_n, &path.path, e);
+                                    println!("ERROR[{}]: {}, {}", thread_n, &path.path, e);
                                     return;
                                 }
                             },
                             Err(FetchError::BackOff{error: e}) => {
                                 // TODO: exponential backoff
                                 // currently waits 10 seconds
-                                println!("WARN[{}] {}, {}", thread_n, &path.path, e);
+                                println!("WARN[{}]: {}, {}", thread_n, &path.path, e);
                                 thread::sleep(Duration::new(10, 0));
                             },
                             Err(FetchError::Skip{error: e}) => {
-                                println!("ERROR[{}] {}, {}", thread_n, &path.path, e);
+                                println!("ERROR[{}]: {}, {}", thread_n, &path.path, e);
                                 retry = false;
                             },
                             Err(FetchError::Blocking{error: e}) => {
-                                println!("ERROR[{}] {}, {}", thread_n, &path.path, e);
+                                println!("ERROR[{}]: {}, {}", thread_n, &path.path, e);
                                 return;
                             },
                         }
@@ -158,43 +158,56 @@ fn run(backup_urls: &Vec<String>, archive_dir: &'static str, archive_ext: &'stat
                             Ok(Some(paths)) => {
                                 retry = false;
                                 for path in paths {
-                                    //println!("DEBUG: dam: {} path: {}", path.repo_type, path.path);
+                                    //println!("DEBUG[m]: dam: {} path: {}", path.repo_type, path.path);
                                     s.send(path);
                                 }
                             },
                             Ok(None) => {
                                 retry = false;
-                                println!("INFO: No paths for site {}", &site.path);
+                                println!("INFO[m]: No paths for site {}", &site.path);
                             },
                             Err(FetchError::LostSession{error: e}) => {
-                                println!("WARN[main] {}, {}", &site.path, e);
+                                println!("WARN[m] {}, {}", &site.path, e);
                                 if let Err(e) = magnolia.new_client() {
-                                    println!("ERROR[main] {}, {}", &site.path, e);
+                                    println!("ERROR[m]: {}, {}", &site.path, e);
                                     return;
                                 }
                             },
                             Err(FetchError::BackOff{error: e}) => {
                                 // TODO: exponential backoff
                                 // currently waits 10 seconds
-                                println!("WARN[main] {}, {}", &site.path, e);
+                                println!("WARN[m]: {}, {}", &site.path, e);
                                 thread::sleep(Duration::new(10, 0));
                             },
                             Err(FetchError::Skip{error: e}) => {
-                                println!("ERROR[main] {}, {}", &site.path, e);
+                                println!("ERROR[m]: {}, {}", &site.path, e);
                                 retry = false;
                             },
                             Err(FetchError::Blocking{error: e}) => {
-                                println!("ERROR[main] {}, {}", &site.path, e);
+                                println!("ERROR[m]: {}, {}", &site.path, e);
                                 return;
                             },
                         }
                     }
                 },
-                Err(e) => println!("ERROR: NOT able to create archive directory: {}, {}", archive_path, e),
+                Err(e) => println!("ERROR[m]: NOT able to create archive directory: {}, {}", archive_path, e),
             }
         }
     } else {
-        println!("ERROR: Unable to retrieve sites for repo {}", repos::RepoType::Dam);
+        println!("ERROR[m]: Unable to retrieve sites for repo {}", repos::RepoType::Dam);
+    }
+    drop(s);
+    // wait up to 5 minutes to end main running thread
+    let mut force = true;
+    for _ in 0..10 {
+        if r.is_empty() {
+            force = false;
+            break;
+        }
+        thread::sleep(Duration::new(30, 0))
+    }
+    if force {
+        println!("ERROR[m]: Forced to terminate main thread with outstanding requests");
     }
 }
 
