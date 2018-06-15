@@ -119,27 +119,6 @@ impl Fetch {
         return Err(err_msg("Unable to retrieve a session. No Session in header."))
     }
 
-    pub fn new(url: &str) -> Result<Fetch, Error> {
-        let uri = url.parse::<Uri>().unwrap();
-        // Extract user and password as we only want to
-        // use those to initialy generate a session.
-        let url = format!("{}://{}:{}{}", uri.scheme().unwrap(), uri.host().unwrap(), uri.port().unwrap(), uri.path().trim_right_matches("/"));
-        let (user, password) = split_authority(uri.authority())?;
-        if let Ok(client) = Client::builder().redirect(RedirectPolicy::none()).build() {
-            let mut fetch = Fetch{
-                url: url.to_string(),
-                user: user.to_string(),
-                password: password.to_string(),
-                session: None,
-                client: client,
-             };
-             fetch.set_session()?;
-             Ok(fetch)
-        } else {
-            Err(err_msg("Unable to build http client."))
-        }
-    }
-
     pub fn new_client(&mut self) -> Result<(), Error> {
         if let Ok(client) = Client::builder().redirect(RedirectPolicy::none()).build() {
             self.client = client;
@@ -148,6 +127,23 @@ impl Fetch {
         } else {
             Err(err_msg("Unable to build http client."))
         }
+    }
+
+    pub fn new(url: &str) -> Result<Fetch, Error> {
+        let uri = url.parse::<Uri>().unwrap();
+        // Extract user and password as we only want to
+        // use those to initialy generate a session.
+        let url = format!("{}://{}:{}{}", uri.scheme().unwrap(), uri.host().unwrap(), uri.port().unwrap(), uri.path().trim_right_matches("/"));
+        let (user, password) = split_authority(uri.authority())?;
+        let mut fetch = Fetch{
+            url: url.to_string(),
+            user: user.to_string(),
+            password: password.to_string(),
+            session: None,
+            client: Client::new(),
+         };
+         fetch.new_client()?;
+         Ok(fetch)
     }
 
     /// Fetch list of sites within a repo:
