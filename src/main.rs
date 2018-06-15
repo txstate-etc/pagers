@@ -1,10 +1,11 @@
 #[macro_use] extern crate lazy_static;
 #[macro_use] extern crate serde_derive;
 extern crate serde;
+#[macro_use] extern crate failure_derive;
+extern crate failure;
 extern crate serde_json;
 extern crate percent_encoding;
 extern crate regex;
-extern crate failure;
 extern crate chrono;
 extern crate filetime;
 extern crate crossbeam_channel;
@@ -17,10 +18,11 @@ pub mod fetch;
 pub mod backup;
 
 use std::thread;
+use std::time::Duration;
 use crossbeam_channel as channel;
 use std::env;
 use std::io;
-use fetch::Fetch;
+use fetch::{Fetch, FetchError};
 use std::fs::{self, DirBuilder, File};
 use chrono::DateTime;
 use filetime::{set_file_times, FileTime};
@@ -75,9 +77,10 @@ fn run(backup_urls: &Vec<String>, archive_dir: &'static str, archive_ext: &'stat
     let primary_url = backup_urls.first().unwrap().clone();
     let (s, r) = channel::unbounded();
     for (thread_n, url) in backup_urls.iter().enumerate() {
-        let thread_magnolia = Fetch::new(url).unwrap();
         let thread_r = r.clone();
+        let thread_url = url.clone();
         thread::spawn(move || {
+            let mut magnolia = Fetch::new(&thread_url).unwrap();
             for path in thread_r {
                 // if previous file exists and has matching modified times then hard link, else create a new entry
                 let previous_file = format!("{}/{}", backup::archive_path(archive_dir, previous_ext, &path), backup::backup_filename(&path));
@@ -93,23 +96,49 @@ fn run(backup_urls: &Vec<String>, archive_dir: &'static str, archive_ext: &'stat
                                 println!("ERROR: {}, {}", &path.path, e);
                             }
                             continue;
-                        } else {
-                            println!("INFO[{}] skip {}", thread_n, &path.path);
                         }
                     }
                 }
                 if let Ok(mut file) = File::create(&archive_file) {
-                    if let Ok(mut export) = thread_magnolia.export(&path) {
-                        match io::copy(&mut export, &mut file) {
-                            Ok(size) => {
-                                let timestamp = FileTime::from_unix_time(path.last_modified.unwrap().timestamp(), path.last_modified.unwrap().timestamp_subsec_nanos());
-                                if let Err(e) = set_file_times(&archive_file, timestamp, timestamp) {
-                                    println!("ERROR: {}, {}", &path.path, e);
-                                } else {
-                                    println!("INFO[{}] exported {} bytes {}", thread_n, size, &path.path);
+                    let mut retry = true;
+                    while retry {
+                        match magnolia.export(&path) {
+                            Ok(mut export) => {
+                                match io::copy(&mut export, &mut file) {
+                                    Ok(size) => {
+                                        let timestamp = FileTime::from_unix_time(path.last_modified.unwrap().timestamp(), path.last_modified.unwrap().timestamp_subsec_nanos());
+                                        if let Err(e) = set_file_times(&archive_file, timestamp, timestamp) {
+                                            println!("ERROR: {}, {}", &path.path, e);
+                                        } else {
+                                            println!("INFO[{}] exported {} bytes {}", thread_n, size, &path.path);
+                                        }
+                                    },
+                                    // TODO: Remove file if bad copy.
+                                    Err(e) => println!("ERROR[{}] failed {}, {}", thread_n, &path.path, e),
+                                }
+                                retry = false;
+                            },
+                            Err(FetchError::LostSession{error: e}) => {
+                                println!("WARN[{}] {}, {}", thread_n, &path.path, e);
+                                if let Err(e) = magnolia.new_client() {
+                                    println!("ERROR[{}] {}, {}", thread_n, &path.path, e);
+                                    return;
                                 }
                             },
-                            Err(e) => println!("ERROR[{}] failed {}, {}", thread_n, &path.path, e),
+                            Err(FetchError::BackOff{error: e}) => {
+                                // TODO: exponential backoff
+                                // currently waits 10 seconds
+                                println!("WARN[{}] {}, {}", thread_n, &path.path, e);
+                                thread::sleep(Duration::new(10, 0));
+                            },
+                            Err(FetchError::Skip{error: e}) => {
+                                println!("ERROR[{}] {}, {}", thread_n, &path.path, e);
+                                retry = false;
+                            },
+                            Err(FetchError::Blocking{error: e}) => {
+                                println!("ERROR[{}] {}, {}", thread_n, &path.path, e);
+                                return;
+                            },
                         }
                     }
                 }
@@ -117,23 +146,55 @@ fn run(backup_urls: &Vec<String>, archive_dir: &'static str, archive_ext: &'stat
         });
     }
 
-    let magnolia = Fetch::new(&primary_url).unwrap();
+    let mut magnolia = Fetch::new(&primary_url).unwrap();
     if let Ok(Some(sites)) = magnolia.sites(repos::RepoType::Dam) {
         for site in sites {
-            //TODO: generate archive site folder
             let archive_path = backup::archive_path(archive_dir, archive_ext, &site);
-            match DirBuilder::new().recursive(true).create(archive_path) {
-                Ok(()) => if let Ok(Some(paths)) = magnolia.paths(&site) {
-                        for path in paths {
-                            //println!("DEBUG: dam: {} path: {}", path.repo_type, path.path);
-                            s.send(path);
+            match DirBuilder::new().recursive(true).create(&archive_path) {
+                Ok(()) => {
+                    let mut retry = true;
+                    while retry {
+                        match magnolia.paths(&site) {
+                            Ok(Some(paths)) => {
+                                retry = false;
+                                for path in paths {
+                                    //println!("DEBUG: dam: {} path: {}", path.repo_type, path.path);
+                                    s.send(path);
+                                }
+                            },
+                            Ok(None) => {
+                                retry = false;
+                                println!("INFO: No paths for site {}", &site.path);
+                            },
+                            Err(FetchError::LostSession{error: e}) => {
+                                println!("WARN[main] {}, {}", &site.path, e);
+                                if let Err(e) = magnolia.new_client() {
+                                    println!("ERROR[main] {}, {}", &site.path, e);
+                                    return;
+                                }
+                            },
+                            Err(FetchError::BackOff{error: e}) => {
+                                // TODO: exponential backoff
+                                // currently waits 10 seconds
+                                println!("WARN[main] {}, {}", &site.path, e);
+                                thread::sleep(Duration::new(10, 0));
+                            },
+                            Err(FetchError::Skip{error: e}) => {
+                                println!("ERROR[main] {}, {}", &site.path, e);
+                                retry = false;
+                            },
+                            Err(FetchError::Blocking{error: e}) => {
+                                println!("ERROR[main] {}, {}", &site.path, e);
+                                return;
+                            },
                         }
-                    } else {
-                        println!("ERROR: NOT able to retrieve paths for repo");
-                    },
-                Err(_) => println!("ERROR NOT able to create archive directory"),
+                    }
+                },
+                Err(e) => println!("ERROR: NOT able to create archive directory: {}, {}", archive_path, e),
             }
         }
+    } else {
+        println!("ERROR: Unable to retrieve sites for repo {}", repos::RepoType::Dam);
     }
 }
 
