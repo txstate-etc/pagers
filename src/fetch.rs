@@ -91,7 +91,7 @@ pub struct Fetch {
 }
 
 impl Fetch {
-    fn set_session(&mut self) -> Result<(), Error> {
+    fn new_session(&mut self) -> Result<(), Error> {
         // If are not managing cookies in our request and do not provide a valid path
         // we will get a redirect which generates an extra session that never gets
         // used. The last session from the final response returns the authenticated
@@ -122,7 +122,7 @@ impl Fetch {
     pub fn new_client(&mut self) -> Result<(), Error> {
         if let Ok(client) = Client::builder().redirect(RedirectPolicy::none()).build() {
             self.client = client;
-            self.set_session()?;
+            self.new_session()?;
             Ok(())
         } else {
             Err(err_msg("Unable to build http client."))
