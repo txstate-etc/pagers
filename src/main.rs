@@ -167,7 +167,7 @@ fn run(backup_urls: &Vec<String>, archive_dir: &'static str, archive_ext: &'stat
                                 println!("INFO[m]: No paths for site {}", &site.path);
                             },
                             Err(FetchError::LostSession{error: e}) => {
-                                println!("WARN[m] {}, {}", &site.path, e);
+                                println!("WARN[m]: {}, {}", &site.path, e);
                                 if let Err(e) = magnolia.new_client() {
                                     println!("ERROR[m]: {}, {}", &site.path, e);
                                     return;
