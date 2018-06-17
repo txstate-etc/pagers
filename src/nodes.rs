@@ -19,10 +19,21 @@ pub struct PathInfo {
 pub type Paths = Vec<PathInfo>;
 
 
-/// Create Information list of node types from data stream
+/// Create Information list of node types from data stream.
+/// Depending on the data fed into this function, this is used to find the
+/// sites that exist for a repo, or used to find the leaf nodes within a site.
 pub fn build_paths<R: Read>(data: R, repo_type: RepoType, folders: bool) -> Result<Option<Paths>, Error> {
     let node = Node::new(data)?;
     Ok(node.flat_paths(repo_type, folders))
+}
+
+/// Reduce the number of nodes by triming the tree down to the level specified.
+/// Level 0 is the root node, and level 1 would be the nodes just off the root
+/// node, and so on. The remaining nodes will be assigned the max last_modified
+/// timestamp of this parent and its associated children.
+pub fn reduce_paths<R: Read>(data: R, repo_type: RepoType, level: usize) -> Result<Option<Paths>, Error> {
+    let node = Node::new(data)?;
+    Ok(node.reduce_paths(repo_type, level))
 }
 
 // Properties of Nodes. The only object we care about at the moment is the lastModified property.
@@ -94,6 +105,78 @@ impl Node {
             Some(paths)
         } else {
             None
+        }
+    }
+
+    fn max_last_modified(&self, repo_type: RepoType) -> Option<DateTime<Local>> {
+        if self.path.ends_with("]") {
+            return None;
+        }
+        let mut last_modified = None;
+        if let Some(path_info) = self.path_info(repo_type, true) {
+            last_modified = path_info.last_modified;
+        }
+        if let Some(ref nodes) = self.nodes {
+            for node in nodes {
+                if let Some(sub_last_modified) = node.max_last_modified(repo_type) {
+                    if let Some(cur_last_modified) = last_modified {
+                        if cur_last_modified < sub_last_modified {
+                            last_modified = Some(sub_last_modified);
+                        }
+                    } else {
+                        last_modified = Some(sub_last_modified);
+                    }
+                }
+            }
+        }
+        last_modified
+    }
+
+    fn reduce_paths(&self, repo_type: RepoType, mut level: usize) -> Option<Paths> {
+        if self.path.ends_with("]") {
+            return None;
+        }
+        let mut paths = Vec::new();
+        // if node has no children (no matter level)
+        //   1) Append this node to paths
+        //   2) Return
+        if self.nodes.is_none() {
+            if let Some(path_info) = self.path_info(repo_type, true) {
+                paths.push(path_info);
+                return Some(paths);
+            }
+            return None;
+        }
+
+        // if level > 0 and node has children
+        //   1) Do NOT append current node to paths
+        //   2) Append results of reduce_paths called on each child w/ --level
+        //   3) return
+        if level > 0 {
+            level -= 1;
+            if let Some(ref nodes) = self.nodes {
+                for node in nodes {
+                    if let Some(sub_nodes) = node.reduce_paths(repo_type, level) {
+                        paths.extend(sub_nodes);
+                    }
+                }
+            }
+            if paths.len() > 0 {
+                return Some(paths);
+            } else {
+                return None;
+            }
+        }
+
+        // if level 0 and node has children
+        //   1) call max_last_modified on self and thus children
+        //   2) Append this node's path_info with results of max_last_modified
+        if let Some(mut path_info) = self.path_info(repo_type, true) {
+            path_info.last_modified = self.max_last_modified(repo_type);
+            paths.push(path_info);
+            return Some(paths);
+        } else {
+            return None;
         }
     }
 }
@@ -389,6 +472,95 @@ mod tests {
             "type": "rep:root"
         }"#.as_bytes();
         let paths = build_paths(data, RepoType::Dam, true).unwrap();
+        assert_eq!(paths, Some(
+            vec![
+                PathInfo{ repo_type: RepoType::Dam, path: "/gato".to_string(), last_modified: None },
+                PathInfo{ repo_type: RepoType::Dam, path: "/Asset.zip".to_string(), last_modified: None },
+        ]));
+    }
+
+    // Given data from repo with depth of 999, return back a list of sites under that repo and
+    // their max last modified time stamps
+    // curl -s -H 'Accept: application/json' '<url>/.rest/nodes/v1/<repo>/?depth=999&excludeNodeTypes=mgnl:resource&includeMetadata=true' | python -m json.tool
+    #[test]
+    fn test_reduce_pages_for_user_repo() {
+        let data = r#"{
+            "identifier": "cafebabe-cafe-babe-cafe-babecafebabe",
+            "name": "",
+            "nodes": [
+                {
+                    "identifier": "deadbeef-cafe-babe-cafe-babecafebabe",
+                    "name": "jcr:system",
+                    "nodes": null,
+                    "path": "/jcr:system",
+                    "properties": [],
+                    "type": "rep:system"
+                },
+                {
+                    "identifier": "7c31a9de-1cb5-41ce-940e-f6716d6cf7ca",
+                    "name": "gato",
+                    "nodes": null,
+                    "path": "/gato",
+                    "properties": [
+                        {
+                            "multiple": false,
+                            "name": "title",
+                            "type": "String",
+                            "values": [
+                                "gato"
+                            ]
+                        }
+                    ],
+                    "type": "mgnl:folder"
+                },
+                {
+                    "identifier": "7c31a9de-1cb5-41ce-940e-f6716d6cf7ca",
+                    "name": "gato",
+                    "nodes": null,
+                    "path": "/gato[2]",
+                    "properties": [
+                        {
+                            "multiple": false,
+                            "name": "title",
+                            "type": "String",
+                            "values": [
+                                "gato"
+                            ]
+                        }
+                    ],
+                    "type": "mgnl:folder"
+                },
+                {
+                    "identifier": "9c5a2747-c439-4c1c-bc0a-ac04f171c1d6",
+                    "name": "Asset.zip",
+                    "nodes": null,
+                    "path": "/Asset.zip",
+                    "properties": [
+                        {
+                            "multiple": false,
+                            "name": "gato_activated_on_creation",
+                            "type": "Boolean",
+                            "values": [
+                                "true"
+                            ]
+                        },
+                        {
+                            "multiple": false,
+                            "name": "name",
+                            "type": "String",
+                            "values": [
+                                "Asset Zip File"
+                            ]
+                        }
+                    ],
+                    "type": "mgnl:asset"
+                }
+            ],
+            "path": "/",
+            "properties": [],
+            "type": "rep:root"
+        }"#.as_bytes();
+        let paths = reduce_paths(data, RepoType::Dam, 1).unwrap();
         assert_eq!(paths, Some(
             vec![
                 PathInfo{ repo_type: RepoType::Dam, path: "/gato".to_string(), last_modified: None },
