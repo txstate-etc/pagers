@@ -221,7 +221,7 @@ impl Fetch {
     //   NOTE: An export jsp was added as Magnolia put their export features behind an interactive Vaadin framework.
     //   curl -s --fail --cookie '<SessionID>' \
     //     '<URL>/docroot/gato/export.jsp?repo=<repo>&path=</path>'
-    pub fn export(&self, path_info: &PathInfo) -> Result<Box<Read>, FetchError> {
+    pub fn export(&self, path_info: &PathInfo) -> Result<impl Read, FetchError> {
         let mut cookie_session = Cookie::new();
         cookie_session.append("JSESSIONID", self.session.as_ref().unwrap().to_string());
         let url = format!("{}/docroot/gato/export.jsp", &self.url);
