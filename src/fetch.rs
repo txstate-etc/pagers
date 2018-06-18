@@ -1,3 +1,4 @@
+use std::time::Duration;
 use std::fmt::Display;
 use repos::RepoType;
 use nodes::{self, Paths, PathInfo};
@@ -120,7 +121,10 @@ impl Fetch {
     }
 
     pub fn new_client(&mut self) -> Result<(), Error> {
-        if let Ok(client) = Client::builder().redirect(RedirectPolicy::none()).build() {
+        if let Ok(client) = Client::builder()
+                .redirect(RedirectPolicy::none())
+                .timeout(Duration::from_secs(120))
+                .build() {
             self.client = client;
             self.new_session()?;
             Ok(())
