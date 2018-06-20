@@ -482,89 +482,189 @@ mod tests {
     // Given data from repo with depth of 999, return back a list of sites under that repo and
     // their max last modified time stamps
     // curl -s -H 'Accept: application/json' '<url>/.rest/nodes/v1/<repo>/?depth=999&excludeNodeTypes=mgnl:resource&includeMetadata=true' | python -m json.tool
+    // NOTE: 'mgnl:contentNode" node types should have their 'mgnl:lastModified' values
+    //   propogated all the way up to the parent type node which in this case is the
+    //   'mgnl:user' node type; thus we do NOT check last modified values of nested
+    //   'mgnl:contentNode' types.
     #[test]
-    fn test_reduce_pages_for_user_repo() {
+    fn test_reduce_pages_for_user_repo_admin_site() {
         let data = r#"{
-            "identifier": "cafebabe-cafe-babe-cafe-babecafebabe",
-            "name": "",
+            "identifier": "0a64bf66-74a0-11e8-a20e-eb23d12c3500",
+            "name": "admin",
             "nodes": [
                 {
-                    "identifier": "deadbeef-cafe-babe-cafe-babecafebabe",
-                    "name": "jcr:system",
-                    "nodes": null,
-                    "path": "/jcr:system",
-                    "properties": [],
-                    "type": "rep:system"
-                },
-                {
-                    "identifier": "7c31a9de-1cb5-41ce-940e-f6716d6cf7ca",
-                    "name": "gato",
-                    "nodes": null,
-                    "path": "/gato",
-                    "properties": [
+                    "identifier": "0b64bf66-74a0-11e8-a20e-eb23d12c3500",
+                    "name": "test_a_user",
+                    "nodes": [
                         {
-                            "multiple": false,
-                            "name": "title",
-                            "type": "String",
-                            "values": [
-                                "gato"
-                            ]
+                            "identifier": "0b64bf66-74a0-11e8-a20e-eb23d12c3501",
+                            "name": "acl_users",
+                            "nodes": [
+                                {
+                                    "identifier": "0b64bf66-74a0-11e8-a20e-eb23d12c3502",
+                                    "name": "0",
+                                    "nodes": null,
+                                    "path": "/admin/test_a_user/acl_users/0",
+                                    "properties": [
+                                        {
+                                            "multiple": false,
+                                            "name": "mgnl:lastModified",
+                                            "type": "Date",
+                                            "values": [
+                                                "2016-11-22T22:50:31.513-07:00"
+                                            ]
+                                        }
+                                    ],
+                                    "type": "mgnl:contentNode"
+                                }
+                            ],
+                            "path": "/admin/test_a_user/acl_users",
+                            "properties": [
+                                {
+                                    "multiple": false,
+                                    "name": "mgnl:lastModified",
+                                    "type": "Date",
+                                    "values": [
+                                        "2016-11-22T22:50:31.513-06:00"
+                                    ]
+                                }
+                            ],
+                            "type": "mgnl:contentNode"
                         }
                     ],
-                    "type": "mgnl:folder"
-                },
-                {
-                    "identifier": "7c31a9de-1cb5-41ce-940e-f6716d6cf7ca",
-                    "name": "gato",
-                    "nodes": null,
-                    "path": "/gato[2]",
+                    "path": "/admin/test_a_user",
                     "properties": [
                         {
                             "multiple": false,
-                            "name": "title",
+                            "name": "enabled",
                             "type": "String",
-                            "values": [
-                                "gato"
-                            ]
-                        }
-                    ],
-                    "type": "mgnl:folder"
-                },
-                {
-                    "identifier": "9c5a2747-c439-4c1c-bc0a-ac04f171c1d6",
-                    "name": "Asset.zip",
-                    "nodes": null,
-                    "path": "/Asset.zip",
-                    "properties": [
-                        {
-                            "multiple": false,
-                            "name": "gato_activated_on_creation",
-                            "type": "Boolean",
                             "values": [
                                 "true"
                             ]
                         },
                         {
                             "multiple": false,
-                            "name": "name",
+                            "name": "email",
                             "type": "String",
                             "values": [
-                                "Asset Zip File"
+                                "test_a_user@example.edu"
+                            ]
+                        },
+                        {
+                            "multiple": false,
+                            "name": "title",
+                            "type": "String",
+                            "values": [
+                                "Test A User"
+                            ]
+                        },
+                        {
+                            "multiple": false,
+                            "name": "mgnl:lastModified",
+                            "type": "Date",
+                            "values": [
+                                "2016-11-22T22:50:31.512-06:00"
                             ]
                         }
                     ],
-                    "type": "mgnl:asset"
+                    "type": "mgnl:user"
+                },
+                {
+                    "identifier": "0c64bf66-74a0-11e8-a20e-eb23d12c3500",
+                    "name": "test_b_user",
+                    "nodes": [
+                        {
+                            "identifier": "0c64bf66-74a0-11e8-a20e-eb23d12c3501",
+                            "name": "acl_users",
+                            "nodes": [
+                                {
+                                    "identifier": "0c64bf66-74a0-11e8-a20e-eb23d12c3502",
+                                    "name": "01",
+                                    "nodes": null,
+                                    "path": "/admin/test_b_user/acl_users/01",
+                                    "properties": [
+                                        {
+                                            "multiple": false,
+                                            "name": "mgnl:lastModified",
+                                            "type": "Date",
+                                            "values": [
+                                                "2017-11-22T22:50:31.518-07:00"
+                                            ]
+                                        }
+                                    ],
+                                    "type": "mgnl:contentNode"
+                                }
+                            ],
+                            "path": "/admin/test_b_user/acl_users",
+                            "properties": [
+                                {
+                                    "multiple": false,
+                                    "name": "mgnl:lastModified",
+                                    "type": "Date",
+                                    "values": [
+                                        "2017-11-22T22:50:31.518-06:00"
+                                    ]
+                                }
+                            ],
+                            "type": "mgnl:contentNode"
+                        }
+                    ],
+                    "path": "/admin/test_b_user",
+                    "properties": [
+                        {
+                            "multiple": false,
+                            "name": "enabled",
+                            "type": "String",
+                            "values": [
+                                "true"
+                            ]
+                        },
+                        {
+                            "multiple": false,
+                            "name": "email",
+                            "type": "String",
+                            "values": [
+                                "test_b_user@example.edu"
+                            ]
+                        },
+                        {
+                            "multiple": false,
+                            "name": "title",
+                            "type": "String",
+                            "values": [
+                                "Test B User"
+                            ]
+                        },
+                        {
+                            "multiple": false,
+                            "name": "mgnl:lastModified",
+                            "type": "Date",
+                            "values": [
+                                "2017-11-22T22:50:31.518-06:00"
+                            ]
+                        }
+                    ],
+                    "type": "mgnl:user"
                 }
             ],
-            "path": "/",
-            "properties": [],
-            "type": "rep:root"
+            "path": "/admin",
+            "properties": [
+                {
+                    "multiple": false,
+                    "name": "mgnl:lastModified",
+                    "type": "Date",
+                    "values": [
+                        "2010-09-09T10:53:27.957-05:00"
+                    ]
+                }
+            ],
+            "type": "mgnl:folder"
         }"#.as_bytes();
-        let paths = reduce_paths(data, RepoType::Dam, 1).unwrap();
+        let paths = reduce_paths(data, RepoType::Users, 1).unwrap();
         assert_eq!(paths, Some(
             vec![
-                PathInfo{ repo_type: RepoType::Dam, path: "/gato".to_string(), last_modified: None },
-                PathInfo{ repo_type: RepoType::Dam, path: "/Asset.zip".to_string(), last_modified: None },
+                PathInfo{ repo_type: RepoType::Users, path: "/admin/test_a_user".to_string(), last_modified: Some("2016-11-22T22:50:31.512-06:00".parse::<DateTime<Local>>().unwrap()) },
+                PathInfo{ repo_type: RepoType::Users, path: "/admin/test_b_user".to_string(), last_modified: Some("2017-11-22T22:50:31.518-06:00".parse::<DateTime<Local>>().unwrap()) },
         ]));
     }
 }
