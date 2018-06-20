@@ -120,10 +120,12 @@ impl Fetch {
         return Err(err_msg("Unable to retrieve a session. No Session in header."))
     }
 
+    // Set timeout to 3 mintutes as edits seem to have issues with responding
+    // sooner then 2 minutes for some large assets.
     pub fn new_client(&mut self) -> Result<(), Error> {
         if let Ok(client) = Client::builder()
                 .redirect(RedirectPolicy::none())
-                .timeout(Duration::from_secs(120))
+                .timeout(Duration::from_secs(180))
                 .build() {
             self.client = client;
             self.new_session()?;
