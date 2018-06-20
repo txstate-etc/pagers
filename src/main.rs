@@ -127,9 +127,15 @@ fn run(backup_urls: &Vec<String>, archive_dir: &'static str, archive_ext: &'stat
                             },
                             Err(FetchError::BackOff{error: e}) => {
                                 // TODO: exponential backoff
-                                // currently waits 10 seconds
+                                // currently waits 15 seconds
                                 println!("WARN[{}]: {}, {}", thread_n, &path.path, e);
-                                thread::sleep(Duration::new(10, 0));
+                                thread::sleep(Duration::new(15, 0));
+                                // Reset connection and renew session as magnolia cannot
+                                // recover a persistent connection after a server error
+                                if let Err(e) = magnolia.new_client() {
+                                    println!("ERROR[{}]: {}, {}", thread_n, &path.path, e);
+                                    return;
+                                }
                             },
                             Err(FetchError::Skip{error: e}) => {
                                 println!("ERROR[{}]: {}, {}", thread_n, &path.path, e);
@@ -175,9 +181,15 @@ fn run(backup_urls: &Vec<String>, archive_dir: &'static str, archive_ext: &'stat
                             },
                             Err(FetchError::BackOff{error: e}) => {
                                 // TODO: exponential backoff
-                                // currently waits 10 seconds
+                                // currently waits 15 seconds
                                 println!("WARN[m]: {}, {}", &site.path, e);
-                                thread::sleep(Duration::new(10, 0));
+                                thread::sleep(Duration::new(15, 0));
+                                // Reset connection and renew session as magnolia cannot
+                                // recover a persistent connection after a server error
+                                if let Err(e) = magnolia.new_client() {
+                                    println!("ERROR[m]: {}, {}", &site.path, e);
+                                    return;
+                                }
                             },
                             Err(FetchError::Skip{error: e}) => {
                                 println!("ERROR[m]: {}, {}", &site.path, e);
