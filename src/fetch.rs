@@ -83,11 +83,12 @@ fn split_authority(authority: Option<&str>) -> Result<(String, String), Error> {
     Err(err_msg("Invalid Authority Segment"))
 }
 
+#[derive(Debug)]
 pub struct Fetch {
     url: String,
     user: String,
     password: String,
-    session: Option<String>,
+    pub session: Option<String>,
     client: Client,
 }
 

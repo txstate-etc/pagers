@@ -3,7 +3,13 @@ use percent_encoding::{utf8_percent_encode, PATH_SEGMENT_ENCODE_SET};
 
 /// get site from path
 pub fn extract_site(path: &str) -> &str {
-    path.splitn(3, "/").skip(1).next().unwrap_or("")
+    path.splitn(3, "/").skip(1).next().unwrap_or("--blank--")
+}
+
+pub fn drop_site(path: &str) -> &str {
+    let mut site_path = path.splitn(3, "/").skip(1);
+    let site = site_path.next().unwrap_or("--blank--");
+    site_path.next().unwrap_or(site)
 }
 
 /// Turn archive dir, extension, and PathInfo into /<repo>/<site>/<archive_extension>
@@ -11,9 +17,9 @@ pub fn archive_path(dir: &str, ext: &str, path: &PathInfo) -> String {
     format!("{}/{}/{}/{}", dir.to_string(), &path.repo_type, extract_site(&path.path), ext)
 }
 
-/// Turn PathInfo into percent_encoded(<repo>/<site/path>).xml
+/// Turn PathInfo into percent_encoded(path-minus-site).xml
 pub fn backup_filename(path: &PathInfo) -> String {
-    utf8_percent_encode(&format!("{}{}.xml", path.repo_type, &path.path), PATH_SEGMENT_ENCODE_SET).to_string()
+    utf8_percent_encode(&format!("{}.xml", drop_site(&path.path)), PATH_SEGMENT_ENCODE_SET).to_string()
 }
 
 #[cfg(test)]
@@ -41,6 +47,6 @@ mod tests {
             repo_type: RepoType::Website,
             last_modified: Some("2018-05-05T08:59:29.261-05:00".parse::<DateTime<Local>>().unwrap()),
         };
-        assert_eq!(backup_filename(&path), "website%2Fgato%2Fsubpage1%2Fsubpage2%2Ffile%20name.odf.xml");
+        assert_eq!(backup_filename(&path), "subpage1%2Fsubpage2%2Ffile%20name.odf.xml");
     }
 }

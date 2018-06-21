@@ -100,8 +100,7 @@ fn run(backup_urls: &Vec<String>, archive_dir: &'static str, archive_ext: &'stat
                     }
                 }
                 if let Ok(mut file) = File::create(&archive_file) {
-                    let mut retry = true;
-                    while retry {
+                    loop {
                         match magnolia.export(&path) {
                             Ok(mut export) => {
                                 match io::copy(&mut export, &mut file) {
@@ -116,30 +115,35 @@ fn run(backup_urls: &Vec<String>, archive_dir: &'static str, archive_ext: &'stat
                                     // TODO: Remove file if bad copy.
                                     Err(e) => println!("ERROR[{}]: Export failed {}, {}", thread_n, &path.path, e),
                                 }
-                                retry = false;
+                                break;
                             },
                             Err(FetchError::LostSession{error: e}) => {
-                                println!("WARN[{}]: {}, {}", thread_n, &path.path, e);
+                                println!("WARN[{}]: {}, session: {:?}, {}", thread_n, &path.path, magnolia.session, e);
                                 if let Err(e) = magnolia.new_client() {
                                     println!("ERROR[{}]: {}, {}", thread_n, &path.path, e);
                                     return;
                                 }
                             },
                             Err(FetchError::BackOff{error: e}) => {
-                                // TODO: exponential backoff
-                                // currently waits 15 seconds
-                                println!("WARN[{}]: {}, {}", thread_n, &path.path, e);
+                                println!("WARN[{}]: {}, session: {:?} {}", thread_n, &path.path, magnolia.session, e);
                                 thread::sleep(Duration::new(15, 0));
                                 // Reset connection and renew session as magnolia cannot
                                 // recover a persistent connection after a server error
+                                // Also it looks like this specific request if retried
+                                // will keep generating 500's so skipping after a pause
+                                // rather then only backing off and retrying.
+                                // TODO: at some point if we find other issues that are
+                                // recoverable with a retry then we may want to retry
+                                // one more time.
                                 if let Err(e) = magnolia.new_client() {
                                     println!("ERROR[{}]: {}, {}", thread_n, &path.path, e);
                                     return;
                                 }
+                                break;
                             },
                             Err(FetchError::Skip{error: e}) => {
                                 println!("ERROR[{}]: {}, {}", thread_n, &path.path, e);
-                                retry = false;
+                                break;
                             },
                             Err(FetchError::Blocking{error: e}) => {
                                 println!("ERROR[{}]: {}, {}", thread_n, &path.path, e);
@@ -158,31 +162,32 @@ fn run(backup_urls: &Vec<String>, archive_dir: &'static str, archive_ext: &'stat
             let archive_path = backup::archive_path(archive_dir, archive_ext, &site);
             match DirBuilder::new().recursive(true).create(&archive_path) {
                 Ok(()) => {
-                    let mut retry = true;
-                    while retry {
+                    loop {
                         match magnolia.paths(&site) {
                             Ok(Some(paths)) => {
-                                retry = false;
                                 for path in paths {
                                     //println!("DEBUG[m]: dam: {} path: {}", path.repo_type, path.path);
                                     s.send(path);
                                 }
+                                break;
                             },
                             Ok(None) => {
-                                retry = false;
                                 println!("INFO[m]: No paths for site {}", &site.path);
+                                break;
                             },
                             Err(FetchError::LostSession{error: e}) => {
-                                println!("WARN[m]: {}, {}", &site.path, e);
+                                println!("WARN[m]: {}, session: {:?}, {}", &site.path, magnolia.session, e);
                                 if let Err(e) = magnolia.new_client() {
                                     println!("ERROR[m]: {}, {}", &site.path, e);
                                     return;
                                 }
                             },
                             Err(FetchError::BackOff{error: e}) => {
-                                // TODO: exponential backoff
-                                // currently waits 15 seconds
-                                println!("WARN[m]: {}, {}", &site.path, e);
+                                // TODO: Exponential backoff currently waits 15 seconds.
+                                // NOTE: Retry behavior basically removed as
+                                // some requests will always generate 500's,
+                                // basically turning this into a skip after delay.
+                                println!("WARN[m]: {}, session: {:?}, {}", &site.path, magnolia.session, e);
                                 thread::sleep(Duration::new(15, 0));
                                 // Reset connection and renew session as magnolia cannot
                                 // recover a persistent connection after a server error
@@ -190,10 +195,11 @@ fn run(backup_urls: &Vec<String>, archive_dir: &'static str, archive_ext: &'stat
                                     println!("ERROR[m]: {}, {}", &site.path, e);
                                     return;
                                 }
+                                break;
                             },
                             Err(FetchError::Skip{error: e}) => {
                                 println!("ERROR[m]: {}, {}", &site.path, e);
-                                retry = false;
+                                break;
                             },
                             Err(FetchError::Blocking{error: e}) => {
                                 println!("ERROR[m]: {}, {}", &site.path, e);
