@@ -14,7 +14,7 @@ pub fn drop_site(path: &str) -> &str {
 
 /// Turn archive dir, extension, and PathInfo into /<repo>/<site>/<archive_extension>
 pub fn archive_path(dir: &str, ext: &str, path: &PathInfo) -> String {
-    format!("{}/{}/{}/{}", dir.to_string(), &path.repo_type, extract_site(&path.path), ext)
+    format!("{}/{}/{}/{}", dir.to_string(), ext, &path.repo_type, extract_site(&path.path))
 }
 
 /// Turn PathInfo into percent_encoded(path-minus-site).xml
@@ -37,7 +37,7 @@ mod tests {
             repo_type: RepoType::Website,
             last_modified: Some("2018-05-05T08:59:29.261-05:00".parse::<DateTime<Local>>().unwrap()),
         };
-        assert_eq!(archive_path(archive_dir, &archive_ext, &path), "/mnt/nfs/archive/website/gato/20180506");
+        assert_eq!(archive_path(archive_dir, &archive_ext, &path), "/mnt/nfs/archive/20180506/website/gato");
     }
 
     #[test]
