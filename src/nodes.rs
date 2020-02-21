@@ -8,7 +8,7 @@ use repos::{RepoType, NodeType, FOLDER_NODE_TYPE};
 /// PathInfo structure holds the associated repo type,
 /// the absolute path of the node with regards to the repo,
 /// and the last time the node was modified.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct PathInfo {
     pub repo_type: RepoType,
     pub path: String,

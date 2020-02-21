@@ -27,9 +27,9 @@ use std::fs::{self, DirBuilder, File};
 use chrono::DateTime;
 use filetime::{set_file_times, FileTime};
 
-/// BACKUP_URLS is a comma delimited list of the cluster
-/// used to backup the data.
-/// https://usr:pwd@host:port/path,https://usr:pwd@host:port/path,...
+// BACKUP_URLS is a comma delimited list of the cluster
+// used to backup the data.
+// https://usr:pwd@host:port/path,https://usr:pwd@host:port/path,...
 lazy_static!{
     static ref BACKUP_URLS: Vec<String> = {
         match env::var("BACKUP_URLS") {
@@ -39,8 +39,9 @@ lazy_static!{
     };
 }
 
-/// ARCHIVE_EXT environment variable is generally used to
-/// date the backups for that day like /repo/site.20180618/...
+// ARCHIVE_EXT environment variable is generally used to
+// date the backups for the current day like:
+// <ARCHIVE_DIR>/2018-06-22-Fri/<REPO>/<SITE>/<PercentEncoded(PATH)>
 lazy_static!{
     static ref ARCHIVE_EXT: String = {
         match env::var("ARCHIVE_EXT") {
@@ -50,9 +51,9 @@ lazy_static!{
     };
 }
 
-/// PREVIOUS_EXT environment variable is generally used to
-/// indicate the date used the backups the previous daily backup
-/// like /repo/site.20180617/...
+// PREVIOUS_EXT environment variable is generally used to
+// indicate the date used for the backups the of previous day like:
+// <ARCHIVE_DIR>/2018-06-21-Thu/<REPO>/<SITE>/<PercentEncode(PATH)>
 lazy_static!{
     static ref PREVIOUS_EXT: String = {
         match env::var("PREVIOUS_EXT") {
@@ -62,8 +63,8 @@ lazy_static!{
     };
 }
 
-/// ARCHIVE_DIR envirnomen variable holds the backup location
-/// in the filesystem.
+// ARCHIVE_DIR environment variable holds the backup location
+// in the filesystem like: /mnt/backups/
 lazy_static!{
     static ref ARCHIVE_DIR: String = {
         match env::var("ARCHIVE_DIR") {
@@ -166,8 +167,9 @@ fn run(backup_urls: &Vec<String>, archive_dir: &'static str, archive_ext: &'stat
                         match magnolia.paths(&site) {
                             Ok(Some(paths)) => {
                                 for path in paths {
-                                    //println!("DEBUG[m]: dam: {} path: {}", path.repo_type, path.path);
-                                    s.send(path);
+                                    if let Err(error) = s.send(path.clone()) {
+                                        println!("ERROR[m]: dam: {} path: {}; {:?}", path.repo_type, path.path, error);
+                                    }
                                 }
                                 break;
                             },

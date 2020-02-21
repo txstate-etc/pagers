@@ -3,17 +3,18 @@ use std::fmt::Display;
 use repos::RepoType;
 use nodes::{self, Paths, PathInfo};
 use failure::{Error, err_msg};
-//use chrono;
 use percent_encoding::percent_decode;
 use regex::Regex;
-use reqwest::{Client, RedirectPolicy, StatusCode};
-use hyper::header::{Cookie, Referer, Accept, qitem, ContentLength};
-use hyper::{Uri, mime};
+use reqwest::{blocking::Client, header, redirect, StatusCode};
+use hyper::{Uri, http::uri::Authority};
 use std::io::Read;
 
 lazy_static!{
     static ref RE_JSESSIONID: Regex = Regex::new(r"^JSESSIONID=([A-F0-9]{32})[; ]").unwrap();
 }
+
+const APPLICATION_JSON: &str = "application/json";
+const TEXT_XML: &str = "text/xml";
 
 #[derive(Debug, Fail)]
 pub enum FetchError {
@@ -67,8 +68,8 @@ fn new_fetch_error_skip<D: Display, T>(text: D) -> Result<T, FetchError> {
 }
 
 // authority is in the form Option<"user:password@host">
-fn split_authority(authority: Option<&str>) -> Result<(String, String), Error> {
-    if let Some(auth) = authority {
+fn split_authority(authority: Option<&Authority>) -> Result<(String, String), Error> {
+    if let Some(auth) = authority.map(|a| a.as_str()) {
         if let Some(at) = auth.find("@") {
             let (split_base, _host) = auth.split_at(at);
             let mut up = split_base.splitn(2, ":");
@@ -106,26 +107,28 @@ impl Fetch {
             .basic_auth(&*self.user, Some(&*self.password))
             .send()?;
         if !resp.status().is_success() {
-            return Err(err_msg("Unable to retrieve a session. Invalid status."))
-        }
-        for header_view in resp.headers().iter() {
-            if header_view.name() == "Set-Cookie" {
-                let header_value = header_view.value_string();
-                if let Some(session) = RE_JSESSIONID.find(&header_value) {
-                    let (_, session) = session.as_str().split_at(11);
-                    self.session = Some(session.to_string());
-                    return Ok(());
+            Err(err_msg("Unable to retrieve a session. Invalid status."))
+        } else {
+            for (name, value) in resp.headers().iter() {
+                if name == "Set-Cookie" {
+                    if let Ok(value) = value.to_str() {
+                        if let Some(session) = RE_JSESSIONID.find(value) {
+                            let (_, session) = session.as_str().split_at(11);
+                            self.session = Some(session.to_string());
+                            return Ok(());
+                        }
+                    }
                 }
             }
+            Err(err_msg("Unable to retrieve a session. No Session in header."))
         }
-        return Err(err_msg("Unable to retrieve a session. No Session in header."))
     }
 
     // Set timeout to 3 mintutes as edits seem to have issues with responding
     // sooner then 2 minutes for some large assets.
     pub fn new_client(&mut self) -> Result<(), Error> {
         if let Ok(client) = Client::builder()
-                .redirect(RedirectPolicy::none())
+                .redirect(redirect::Policy::none())
                 .timeout(Duration::from_secs(180))
                 .build() {
             self.client = client;
@@ -140,7 +143,7 @@ impl Fetch {
         let uri = url.parse::<Uri>().unwrap();
         // Extract user and password as we only want to
         // use those to initialy generate a session.
-        let url = format!("{}://{}:{}{}", uri.scheme().unwrap(), uri.host().unwrap(), uri.port().unwrap(), uri.path().trim_right_matches("/"));
+        let url = format!("{}://{}:{}{}", uri.scheme().unwrap(), uri.host().unwrap(), uri.port().unwrap(), uri.path().trim_end_matches("/"));
         let (user, password) = split_authority(uri.authority())?;
         let mut fetch = Fetch{
             url: url.to_string(),
@@ -157,12 +160,11 @@ impl Fetch {
     ///   NOTE: Exclude 'mgnl:resources' from magnolia RESTful json responses as they include binary data we do NOT require.
     ///   curl -s -H 'Accept: application/json' '<url>/.rest/nodes/v1/<repo>?depth=1&excludeNodeTypes=mgnl:resource'
     pub fn sites(&self, repo_type: RepoType) -> Result<Option<Paths>, FetchError> {
-        let mut cookie_session = Cookie::new();
-        cookie_session.append("JSESSIONID", self.session.as_ref().unwrap().to_string());
+        let cookie_session = format!("JSESSIONID={}", self.session.as_ref().unwrap());
         let url = format!("{}/.rest/nodes/v1/{}?depth=1&excludeNodeTypes=mgnl:resource", self.url, repo_type);
         let resp = self.client.get(&url)
-            .header(cookie_session)
-            .header(Accept(vec![qitem(mime::APPLICATION_JSON)]))
+            .header(header::COOKIE, cookie_session)
+            .header(header::ACCEPT, APPLICATION_JSON) //Accept(vec![qitem(mime::APPLICATION_JSON)]))
             .send()
             .or_else(new_fetch_error_skip)?;
         if resp.status().is_success() {
@@ -177,12 +179,11 @@ impl Fetch {
     /// For all paths within repo while NOT including mgnl:folders
     ///   curl -s -H 'Accept: application/json' '<url>/.rest/nodes/v1/<repo>/<site/path>?depth=999&excludeNodeTypes=mgnl:resource&includeMetadata=true'
     pub fn paths(&self, path_info: &PathInfo) -> Result<Option<Paths>, FetchError> {
-        let mut cookie_session = Cookie::new();
-        cookie_session.append("JSESSIONID", self.session.as_ref().unwrap().to_string());
+        let cookie_session = format!("JSESSIONID={}", self.session.as_ref().unwrap());
         let url = format!("{}/.rest/nodes/v1/{}{}?depth=999&excludeNodeTypes=mgnl:resource&includeMetadata=true", self.url, path_info.repo_type, path_info.path);
         let resp = self.client.get(&url)
-            .header(cookie_session)
-            .header(Accept(vec![qitem(mime::APPLICATION_JSON)]))
+            .header(header::COOKIE, cookie_session)
+            .header(header::ACCEPT, APPLICATION_JSON) //Accept(vec![qitem(mime::APPLICATION_JSON)]))
             .send()
             .or_else(new_fetch_error_skip)?;
         if resp.status().is_success() {
@@ -195,17 +196,26 @@ impl Fetch {
     /// Was going to have magnolia return back Content-Length of path, however,
     /// both export.jsp and restful interfaces only return back chunked responses
     /// which does NOT contain a content length header. Instead we will request
-    /// the actual document. WARN: This may only work for dam.
+    /// the actual document via HEAD method. WARN: This may only work for dam.
     pub fn doc_size(&self, path_info: &PathInfo) -> Result<Option<u64>, FetchError> {
-        let mut cookie_session = Cookie::new();
-        cookie_session.append("JSESSIONID", self.session.as_ref().unwrap().to_string());
+        let cookie_session = format!("JSESSIONID={}", self.session.as_ref().unwrap());
         let url = format!("{}/{}{}", self.url, path_info.repo_type, path_info.path);
         let resp = self.client.head(&url)
-            .header(cookie_session)
+            .header(header::COOKIE, cookie_session)
             .send()
             .or_else(new_fetch_error_skip)?;
         if resp.status().is_success() {
-            Ok(resp.headers().get::<ContentLength>().map(|ct_len| **ct_len))
+            match resp.headers().get(header::CONTENT_LENGTH) {
+                Some(content_length) => match content_length.to_str() {
+                    Ok(content_length) => if let Ok(content_length) = content_length.parse::<u64>() {
+                            Ok(Some(content_length))
+                        } else {
+                            Ok(None)
+                        },
+                    _ => Ok(None),
+                },
+                None => Ok(None),
+            }
         } else {
             new_fetch_error(Some(resp.status()), "Unable to retrieve document")
         }
@@ -229,13 +239,12 @@ impl Fetch {
     //   curl -s --fail --cookie '<SessionID>' \
     //     '<URL>/docroot/gato/export.jsp?repo=<repo>&path=</path>'
     pub fn export(&self, path_info: &PathInfo) -> Result<impl Read, FetchError> {
-        let mut cookie_session = Cookie::new();
-        cookie_session.append("JSESSIONID", self.session.as_ref().unwrap().to_string());
+        let cookie_session = format!("JSESSIONID={}", self.session.as_ref().unwrap());
         let url = format!("{}/docroot/gato/export.jsp", &self.url);
         let resp = self.client.get(&url)
-            .header(cookie_session)
-            .header(Accept(vec![qitem(mime::TEXT_XML)]))
-            .header(Referer::new(url))
+            .header(header::COOKIE, cookie_session)
+            .header(header::ACCEPT, TEXT_XML) //Accept(vec![qitem(mime::TEXT_XML)]))
+            .header(header::REFERER, &url)
             .query(&[
                 ("repo", path_info.repo_type.to_string()),
                 ("path", path_info.path.clone()),

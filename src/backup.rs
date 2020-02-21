@@ -1,5 +1,5 @@
 use nodes::PathInfo;
-use percent_encoding::{utf8_percent_encode, PATH_SEGMENT_ENCODE_SET};
+use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 
 /// get site from path
 pub fn extract_site(path: &str) -> &str {
@@ -19,7 +19,7 @@ pub fn archive_path(dir: &str, ext: &str, path: &PathInfo) -> String {
 
 /// Turn PathInfo into percent_encoded(path-minus-site).xml
 pub fn backup_filename(path: &PathInfo) -> String {
-    utf8_percent_encode(&format!("{}.xml", drop_site(&path.path)), PATH_SEGMENT_ENCODE_SET).to_string()
+    utf8_percent_encode(&format!("{}.xml", drop_site(&path.path)), NON_ALPHANUMERIC).to_string()
 }
 
 #[cfg(test)]

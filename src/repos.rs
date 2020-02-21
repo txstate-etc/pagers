@@ -51,7 +51,7 @@ lowercase_enum!{
     name RepoType,
     "dam" => (Dam, "mgnl:asset"), //"mgnl:folder"
     "website" => (Website, "mgnl:page"),
-    "config" => (Config, "mgnl:content"), //NOTE: mgnl:contentNode is used parts of a page that need to be activated with the parent
+    "config" => (Config, "mgnl:content"), //NOTE: mgnl:contentNode is used as parts of a page that need to be activated with the parent
     "gatoapps" => (Gatoapps, "mgnl:content"),
     "resources" => (Resources, "mgnl:content"), //"mgnl:folder"
     "usergroups" => (Usergroups, "mgnl:group"),
