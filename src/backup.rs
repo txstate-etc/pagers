@@ -47,6 +47,6 @@ mod tests {
             repo_type: RepoType::Website,
             last_modified: Some("2018-05-05T08:59:29.261-05:00".parse::<DateTime<Local>>().unwrap()),
         };
-        assert_eq!(backup_filename(&path), "subpage1%2Fsubpage2%2Ffile%20name.odf.xml");
+        assert_eq!(backup_filename(&path), "subpage1%2Fsubpage2%2Ffile%20name%2Eodf.xml");
     }
 }
