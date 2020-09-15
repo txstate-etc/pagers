@@ -102,7 +102,9 @@ impl Fetch {
         // Example: Set-Cookie: JSESSIONID=9BE61261AC5D7F7AED81F84963CE9430; Path=/; HttpOnly
         // NOTE: Turned off Redirection as Reqwest default is to follow the chain
         // of at least 10 redirects before returning an error.
-        let url = format!("{}/.magnolia/admincentral", self.url.to_string());
+        // Also using ?ticket=<fake-token> query to force gato to return a JSESSIONID as that
+        // seems to be required now.
+        let url = format!("{}/?ticket=ST-1599840868598-DFiNGxcVosV6MaapmDPS9zixb", self.url.to_string());
         let resp = self.client.get(&url)
             .basic_auth(&*self.user, Some(&*self.password))
             .send()?;
