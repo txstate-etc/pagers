@@ -108,7 +108,7 @@ impl Fetch {
         let resp = self.client.get(&url)
             .basic_auth(&*self.user, Some(&*self.password))
             .send()?;
-        if !resp.status().is_success() {
+        if !resp.status().is_success() && !(resp.status() == StatusCode::FOUND) {
             Err(err_msg("Unable to retrieve a session. Invalid status."))
         } else {
             for (name, value) in resp.headers().iter() {
@@ -126,12 +126,12 @@ impl Fetch {
         }
     }
 
-    // Set timeout to 3 mintutes as edits seem to have issues with responding
-    // sooner then 2 minutes for some large assets.
+    // Set timeout to 3 or more mintutes as edits seem to have issues with
+    // responding sooner then 2 minutes for some large assets.
     pub fn new_client(&mut self) -> Result<(), Error> {
         if let Ok(client) = Client::builder()
                 .redirect(redirect::Policy::none())
-                .timeout(Duration::from_secs(180))
+                .timeout(Duration::from_secs(360))
                 .build() {
             self.client = client;
             self.new_session()?;
