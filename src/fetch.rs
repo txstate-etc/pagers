@@ -104,7 +104,7 @@ impl Fetch {
         // of at least 10 redirects before returning an error.
         // Also using ?ticket=<fake-token> query to force gato to return a JSESSIONID as that
         // seems to be required now.
-        let url = format!("{}/?ticket=ST-1599840868598-DFiNGxcVosV6MaapmDPS9zixb", self.url.to_string());
+        let url = format!("{}/", self.url.to_string());
         let resp = self.client.get(&url)
             .basic_auth(&*self.user, Some(&*self.password))
             .send()?;
